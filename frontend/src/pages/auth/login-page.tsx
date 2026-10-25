@@ -16,7 +16,7 @@ export function LoginPage() {
 
   const { submit, isSubmitting, error } = useAsyncSubmit(async (payload: LoginPayload) => {
     const data = await authService.login(payload)
-    setUser(data.user)
+    setUser(data.user, data.token)
     return data
   })
 

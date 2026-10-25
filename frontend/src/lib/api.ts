@@ -1,10 +1,26 @@
 import axios, { isAxiosError } from 'axios'
 
+const rawBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+const baseURL = rawBase ? (rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`) : '/api'
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL,
   withCredentials: true,
   timeout: 20_000,
   headers: { 'Content-Type': 'application/json' },
+})
+
+api.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem('renderly_token') || localStorage.getItem('lucent_token')
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
+  } catch {
+    // Ignore storage issues
+  }
+  return config
 })
 
 api.interceptors.response.use(
@@ -15,9 +31,10 @@ api.interceptors.response.use(
       // Only clear auth if it's not a login or register check
       if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
         try {
-          // Dynamic import or direct store access
           localStorage.removeItem('renderly_user')
           localStorage.removeItem('lucent_user')
+          localStorage.removeItem('renderly_token')
+          localStorage.removeItem('lucent_token')
         } catch {
           // Ignore
         }

@@ -7,12 +7,13 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   isInitialized: boolean
-  setUser: (user: User | null) => void
+  setUser: (user: User | null, token?: string) => void
   checkAuth: () => Promise<void>
   logout: () => Promise<void>
 }
 
 const STORAGE_KEY = 'renderly_user'
+const TOKEN_KEY = 'renderly_token'
 
 function loadSavedUser(): User | null {
   try {
@@ -31,12 +32,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   isInitialized: false,
 
-  setUser: (user) => {
+  setUser: (user, token) => {
     if (user) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token)
+      }
       set({ user, isAuthenticated: true, isInitialized: true })
     } else {
       localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem('lucent_user')
+      localStorage.removeItem('lucent_token')
       set({ user: null, isAuthenticated: false, isInitialized: true })
     }
   },
@@ -50,10 +57,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user: data.user, isAuthenticated: true, isLoading: false, isInitialized: true })
       } else {
         localStorage.removeItem(STORAGE_KEY)
+        localStorage.removeItem(TOKEN_KEY)
         set({ user: null, isAuthenticated: false, isLoading: false, isInitialized: true })
       }
     } catch {
       localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(TOKEN_KEY)
       set({ user: null, isAuthenticated: false, isLoading: false, isInitialized: true })
     }
   },
@@ -65,7 +74,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Continue even if network error
     } finally {
       localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem('lucent_user')
+      localStorage.removeItem('lucent_token')
       set({ user: null, isAuthenticated: false, isInitialized: true })
     }
   },

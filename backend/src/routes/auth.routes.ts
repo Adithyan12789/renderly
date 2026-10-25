@@ -28,7 +28,7 @@ function setAuthCookie(res: Response, token: string) {
   res.cookie('renderly_session', token, {
     httpOnly: true,
     secure: env.isProduction,
-    sameSite: 'lax',
+    sameSite: env.isProduction ? 'none' : 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
   })
@@ -82,8 +82,13 @@ authRouter.post('/login', async (req, res, next) => {
 
 // Logout
 authRouter.post('/logout', (_req, res) => {
-  res.clearCookie('renderly_session', { path: '/' })
-  res.clearCookie('lucent_session', { path: '/' })
+  const cookieOpts = {
+    path: '/',
+    secure: env.isProduction,
+    sameSite: (env.isProduction ? 'none' : 'lax') as 'none' | 'lax',
+  }
+  res.clearCookie('renderly_session', cookieOpts)
+  res.clearCookie('lucent_session', cookieOpts)
   return sendSuccess(res, null)
 })
 

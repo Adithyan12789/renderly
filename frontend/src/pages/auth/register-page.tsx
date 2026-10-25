@@ -15,7 +15,7 @@ export function RegisterPage() {
   const { submit, isSubmitting, error } = useAsyncSubmit(async (payload: RegisterPayload) => {
     const data = await authService.register(payload)
     if (data?.user) {
-      setUser(data.user)
+      setUser(data.user, data.token)
     }
     return data
   })
