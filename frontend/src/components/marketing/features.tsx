@@ -1,4 +1,4 @@
-import { Check, Film, Presentation, Sparkles, type LucideIcon } from 'lucide-react'
+import { Check, Film, Sparkles, Zap, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { SectionHeading, SerifAccent } from '@/components/ui/section-heading'
 import { RENDER_STYLES } from '@/lib/site-content'
@@ -37,11 +37,11 @@ export function Features() {
             visual={<WalkthroughVisual />}
           />
           <FeatureRow
-            icon={Presentation}
-            label="Client Presentations"
-            title="Turn renders into a polished, shareable deck"
-            description="Assemble renders, palettes, and specifications into branded presentation pages. Share a link or export to PDF for your client meeting."
-            points={['Material and palette boards', 'Branded layouts', 'Share links and PDF export']}
+            icon={Zap}
+            label="Optical Realism Suite"
+            title="Instant relighting, macro close-ups, and 8K enhancement"
+            description="Fine-tune lighting temperatures from golden hour to dusk, synthesize Hasselblad 120mm architectural close-ups, and upscale with micro-porosity ray-tracing."
+            points={['Instant Relighting engine', 'Macro detail close-up synthesis', 'HyperReal 8K optical enhancement']}
             visual={<PresentationVisual />}
           />
         </div>

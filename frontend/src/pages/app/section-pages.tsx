@@ -1,4 +1,4 @@
-import { Film, LogOut, Presentation, Sparkles, User, type LucideIcon } from 'lucide-react'
+import { Film, LogOut, Sparkles, User, type LucideIcon } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { PageHeader } from '@/components/app/page-header'
 import { Button } from '@/components/ui/button'
@@ -43,18 +43,6 @@ export function WalkthroughsPage() {
       icon={Film}
       emptyTitle="No walkthroughs yet"
       emptyDescription="Walkthroughs are created from a project's 3D scene. Add camera keyframes in the editor to build one."
-    />
-  )
-}
-
-export function PresentationsPage() {
-  return (
-    <SectionPage
-      title="Presentations"
-      description="Turn renders and specifications into client-ready decks."
-      icon={Presentation}
-      emptyTitle="No presentations yet"
-      emptyDescription="Assemble renders, palettes, and project details into shareable presentations and PDFs."
     />
   )
 }

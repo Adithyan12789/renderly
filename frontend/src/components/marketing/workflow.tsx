@@ -1,4 +1,4 @@
-import { Camera, Presentation, Upload, Wand2 } from 'lucide-react'
+import { Camera, Upload, Wand2, Zap } from 'lucide-react'
 import { SectionHeading, SerifAccent } from '@/components/ui/section-heading'
 
 const STEPS = [
@@ -18,9 +18,9 @@ const STEPS = [
     description: 'Choose a style and prompt. AI renders and walkthrough videos process as background jobs.',
   },
   {
-    icon: Presentation,
-    title: 'Present',
-    description: 'Compare results, assemble a branded presentation, and share a private link or PDF.',
+    icon: Zap,
+    title: 'Refine & Relight',
+    description: 'Simulate natural lighting shifts, synthesize macro detail close-ups, and upscale to 8K.',
   },
 ]
 

@@ -15,17 +15,44 @@ export function createApp() {
   app.set('trust proxy', 1)
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-  app.use(cors({ origin: env.clientOrigins, credentials: true }))
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true)
+
+        const isAllowed =
+          env.clientOrigins.includes(origin) ||
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+
+        if (isAllowed) {
+          return callback(null, true)
+        }
+        return callback(null, false)
+      },
+      credentials: true,
+      optionsSuccessStatus: 200,
+    }),
+  )
   app.use(
     '/api',
     rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }),
   )
-  app.use(express.json({ limit: '10mb' }))
+  app.use(express.json({ limit: '25mb' }))
+  app.use(express.urlencoded({ limit: '25mb', extended: true }))
   app.use(cookieParser())
 
   // Serve static render uploads
   const uploadsDir = path.resolve(process.cwd(), 'uploads')
-  app.use('/uploads', express.static(uploadsDir))
+  app.use(
+    '/uploads',
+    (req, res, next) => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+      next()
+    },
+    express.static(uploadsDir),
+  )
 
   app.use('/api', apiRouter)
 

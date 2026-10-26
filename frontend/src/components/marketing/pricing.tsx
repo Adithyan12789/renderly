@@ -25,7 +25,7 @@ const TIERS = [
       'Unlimited projects',
       '500 AI renders / month',
       '4K renders and walkthrough videos',
-      'Presentation builder and share links',
+      'Instant Relight & HyperReal 8K Suite',
       '50 GB storage',
     ],
     cta: { label: 'Get Studio', to: '/register' },

@@ -1,5 +1,6 @@
 import { Boxes, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PROJECT_TYPES } from '@/lib/site-content'
 import type { Project } from '@/types'
@@ -38,7 +39,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   return (
     <>
       <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-xl hover:shadow-black/20">
-        <div className="relative aspect-[4/3] overflow-hidden bg-surface-raised">
+        <Link to={`/app/projects/${project.id}`} className="block relative aspect-[4/3] overflow-hidden bg-surface-raised cursor-pointer">
           {displayThumbnail ? (
             <img
               src={displayThumbnail}
@@ -76,13 +77,15 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               </button>
             </div>
           )}
-        </div>
+        </Link>
 
         <div className="flex flex-1 flex-col justify-between gap-2 p-4">
           <div>
-            <h3 className="truncate font-medium text-foreground" title={project.name}>
-              {project.name}
-            </h3>
+            <Link to={`/app/projects/${project.id}`} className="hover:text-accent transition-colors">
+              <h3 className="truncate font-medium text-foreground hover:text-accent" title={project.name}>
+                {project.name}
+              </h3>
+            </Link>
             {project.description ? (
               <p className="mt-1 line-clamp-1 text-xs text-muted" title={project.description}>
                 {project.description}

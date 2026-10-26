@@ -1,4 +1,4 @@
-import { Film, FolderKanban, LayoutGrid, Presentation, Settings, Sparkles, type LucideIcon } from 'lucide-react'
+import { Film, FolderKanban, LayoutGrid, Settings, Sparkles, type LucideIcon } from 'lucide-react'
 
 export interface AppNavItem {
   label: string
@@ -12,7 +12,6 @@ export const APP_NAV: AppNavItem[] = [
   { label: 'Projects', to: '/app/projects', icon: FolderKanban },
   { label: 'Render Studio', to: '/app/renders', icon: Sparkles },
   { label: 'Walkthroughs', to: '/app/walkthroughs', icon: Film },
-  { label: 'Presentations', to: '/app/presentations', icon: Presentation },
 ]
 
 export const APP_SECONDARY_NAV: AppNavItem[] = [{ label: 'Settings', to: '/app/settings', icon: Settings }]

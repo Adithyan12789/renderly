@@ -1,4 +1,4 @@
-import { Film, ImageIcon, Loader2, Presentation, Sparkles, type LucideIcon } from 'lucide-react'
+import { Film, ImageIcon, Loader2, Sparkles, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { ProjectsBrowser } from '@/components/app/projects-browser'
@@ -13,9 +13,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { Project, Render } from '@/types'
 
 const QUICK_ACTIONS: { label: string; description: string; to: string; icon: LucideIcon }[] = [
-  { label: 'AI render', description: 'Generate a still from a prompt', to: '/app/renders', icon: Sparkles },
-  { label: 'Walkthrough', description: 'Animate a camera path', to: '/app/walkthroughs', icon: Film },
-  { label: 'Presentation', description: 'Build a client deck', to: '/app/presentations', icon: Presentation },
+  { label: 'AI Render Studio', description: 'Upload a 3D model & generate photoreal stills', to: '/app/renders', icon: Sparkles },
+  { label: 'Walkthroughs', description: 'Generate 60fps cinematic flythroughs', to: '/app/walkthroughs', icon: Film },
+  { label: 'Projects Workspace', description: 'Manage project architectural scenes', to: '/app/projects', icon: ImageIcon },
 ]
 
 export function DashboardPage() {

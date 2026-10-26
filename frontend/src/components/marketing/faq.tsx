@@ -16,7 +16,7 @@ const QUESTIONS = [
   },
   {
     q: 'Can I share work with clients?',
-    a: 'Yes. Presentations can be shared via a private link or exported as a PDF, and all renders can be downloaded in high resolution.',
+    a: 'Yes. All high-resolution renders, macro detail close-up collages, and 60fps walkthrough video files can be downloaded directly and shared with clients.',
   },
   {
     q: 'Who owns the renders I create?',

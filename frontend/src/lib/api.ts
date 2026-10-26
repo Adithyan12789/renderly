@@ -53,3 +53,18 @@ export function getErrorMessage(error: unknown): string {
   }
   return error instanceof Error ? error.message : 'Something went wrong.'
 }
+
+export function resolveImageUrl(url: string | null | undefined): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url
+  }
+  if (url.startsWith('/uploads/')) {
+    const apiOrigin = (import.meta.env.VITE_API_URL || 'http://localhost:4000')
+      .replace(/\/api\/?$/, '')
+      .replace(/\/+$/, '')
+    return `${apiOrigin}${url}`
+  }
+  return url
+}
+

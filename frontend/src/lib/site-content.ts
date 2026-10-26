@@ -1,4 +1,4 @@
-import type { ProjectType, RenderStyle } from '@/types'
+import type { ProjectType, RenderEngine, RenderLighting, RenderStyle } from '@/types'
 
 export const BRAND = {
   name: 'Renderly',
@@ -120,6 +120,113 @@ export const ARCHITECTURAL_STYLES: StyleOption[] = [
 
 export const RENDER_STYLES = ARCHITECTURAL_STYLES.map((s) => s.label)
 
+export interface RenderEngineOption {
+  value: RenderEngine
+  label: string
+  tagline: string
+  description: string
+  badge: string
+}
+
+export const RENDER_ENGINES: RenderEngineOption[] = [
+  {
+    value: 'hyperreal',
+    label: 'HyperReal Engine',
+    tagline: 'Presentation & Portfolio Grade',
+    description: 'Ultra-high resolution ray-traced reflections, fine material texture detail, and photorealistic architectural magazine quality.',
+    badge: 'Flagship',
+  },
+  {
+    value: 'lumen',
+    label: 'Lumen Engine',
+    tagline: 'Balanced Lighting & Atmosphere',
+    description: 'Physically based rendering, natural daylighting, soft shadows, and clean material finishes.',
+    badge: 'Production',
+  },
+  {
+    value: 'fidelity',
+    label: 'Fidelity Engine',
+    tagline: 'Strict Geometry & Structure',
+    description: 'Maximum preservation of building lines, openings, massing, and geometric edges from your 3D model.',
+    badge: 'Structure',
+  },
+]
+
+export interface LightingOption {
+  value: RenderLighting
+  label: string
+  tagline: string
+}
+
+export const LIGHTING_PRESETS: LightingOption[] = [
+  { value: 'golden-hour', label: 'Golden Hour Dusk', tagline: 'Warm dusk amber light & soft shadows' },
+  { value: 'daylight', label: 'Natural Daylight', tagline: 'Crisp morning sun & vivid dynamic range' },
+  { value: 'dusk', label: 'Blue Hour Dusk', tagline: 'Twilight sky with glowing cove LEDs' },
+  { value: 'overcast', label: 'Overcast Studio', tagline: 'Soft diffused shadowless editorial daylight' },
+  { value: 'night', label: 'Dramatic Night', tagline: 'Moody architectural spotlights & starlit pool' },
+]
+
+export interface EnvironmentOption {
+  value: string
+  label: string
+  tagline: string
+}
+
+export const ENVIRONMENT_PRESETS: EnvironmentOption[] = [
+  { value: 'landscaped-gardens', label: 'Lush Gardens & Pool', tagline: 'Manicured lawns, exotic palms & reflection water' },
+  { value: 'pine-forest', label: 'Misty Pine Forest', tagline: 'Atmospheric alpine conifers & mountain fog' },
+  { value: 'coastal', label: 'Coastal Oceanfront', tagline: 'Azure horizon, gentle sea spray & reflection' },
+  { value: 'urban', label: 'Modern Urban Street', tagline: 'Metropolitan sidewalk, wet asphalt & streetlamps' },
+  { value: 'zen', label: 'Zen Rock Courtyard', tagline: 'Raked gravel, sculptural Japanese maple & stone' },
+]
+
+export interface Sample3DModel {
+  id: string
+  title: string
+  category: string
+  thumbnailUrl: string
+  description: string
+  aspectRatio: '16:9' | '4:3' | '1:1'
+}
+
+export const SAMPLE_3D_MODELS: Sample3DModel[] = [
+  {
+    id: 'villa-clay',
+    title: 'Modern Villa Clay Model',
+    category: 'SketchUp 3D Viewport',
+    thumbnailUrl: '/images/samples/villa-model.jpg',
+    description: 'Untextured clay massing study with cantilevered roofline and pool deck.',
+    aspectRatio: '16:9',
+  },
+  {
+    id: 'pavilion-model',
+    title: 'Minimalist Pavilion Model',
+    category: 'Rhino / Revit Viewport',
+    thumbnailUrl: '/images/samples/pavilion-model.jpg',
+    description: 'Surface model of a glass and concrete garden pavilion.',
+    aspectRatio: '16:9',
+  },
+  {
+    id: 'living-room-blockout',
+    title: 'Interior Salon Blockout',
+    category: 'Blender White Model',
+    thumbnailUrl: '/images/samples/living-room-model.png',
+    description: 'Double-height living space geometry with floor-to-ceiling openings.',
+    aspectRatio: '16:9',
+  },
+]
+
+export const QUICK_MATERIAL_TAGS = [
+  'Travertine stone facade',
+  'Floor-to-ceiling low-iron glass',
+  'Charred shou sugi ban cedar',
+  'Board-formed architectural concrete',
+  'Warm 3000K recessed cove lighting',
+  'Brushed bronze mullions',
+  'Herringbone French oak floor',
+  'Infinity reflection pool with ripples',
+  'Lush cascading monstera landscaping',
+]
 
 export const PROJECT_TYPES: { value: ProjectType; label: string; description: string }[] = [
   { value: 'architecture', label: 'Architecture', description: 'Exteriors, facades, and site context' },

@@ -67,6 +67,31 @@ projectsRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res, n
   }
 })
 
+// Update project
+const updateProjectSchema = z.object({
+  name: z.string().trim().min(1, 'Project name is required').max(120).optional(),
+  description: z.string().trim().max(1000).optional(),
+  type: z.enum(['architecture', 'interior', 'product']).optional(),
+  thumbnailUrl: z.string().trim().optional().nullable(),
+})
+
+projectsRouter.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = updateProjectSchema.parse(req.body)
+    const project = await ProjectModel.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user!._id },
+      { $set: payload },
+      { new: true },
+    )
+    if (!project) {
+      throw new HttpError(404, 'Project not found.', 'PROJECT_NOT_FOUND')
+    }
+    return sendSuccess(res, { project: project.toProjectJSON() })
+  } catch (error) {
+    next(error)
+  }
+})
+
 // Delete project
 projectsRouter.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
