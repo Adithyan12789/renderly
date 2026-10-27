@@ -81,6 +81,7 @@ export type RenderStyle =
 export type RenderEngine = 'hyperreal' | 'lumen' | 'fidelity'
 export type RenderLighting = 'golden-hour' | 'daylight' | 'dusk' | 'overcast' | 'night'
 export type RenderAspectRatio = '16:9' | '4:3' | '1:1' | '9:16'
+export type RenderingMode = 'preserve-structure' | 'realistic-enhancement' | 'creative-redesign'
 
 export type RenderVersionType =
   | 'original'
@@ -106,6 +107,7 @@ export interface Render {
   style: RenderStyle
   engine: RenderEngine
   lighting: RenderLighting
+  renderingMode?: RenderingMode
   geometryStrength: number
   environment: string
   aspectRatio: RenderAspectRatio
@@ -145,6 +147,7 @@ export interface GenerateRenderPayload {
   style: RenderStyle
   engine?: RenderEngine
   lighting?: RenderLighting
+  renderingMode?: RenderingMode
   environment?: string
   geometryStrength?: number
   aspectRatio?: RenderAspectRatio

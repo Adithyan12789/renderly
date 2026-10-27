@@ -15,6 +15,7 @@ export type RenderStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 export type RenderEngine = 'hyperreal' | 'lumen' | 'fidelity'
 export type RenderLighting = 'golden-hour' | 'daylight' | 'dusk' | 'overcast' | 'night'
+export type RenderingMode = 'preserve-structure' | 'realistic-enhancement' | 'creative-redesign'
 
 export type RenderVersionType =
   | 'original'
@@ -37,6 +38,7 @@ export interface IRender extends Document {
   style: RenderStyle
   engine: RenderEngine
   lighting: RenderLighting
+  renderingMode?: RenderingMode
   geometryStrength?: number
   environment?: string
   aspectRatio: RenderAspectRatio
@@ -59,6 +61,7 @@ export interface IRender extends Document {
     style: RenderStyle
     engine: RenderEngine
     lighting: RenderLighting
+    renderingMode: RenderingMode
     geometryStrength: number
     environment: string
     aspectRatio: RenderAspectRatio
@@ -101,7 +104,12 @@ const renderSchema = new Schema<IRender>(
       enum: ['golden-hour', 'daylight', 'dusk', 'overcast', 'night'],
       default: 'golden-hour',
     },
-    geometryStrength: { type: Number, default: 0.42 },
+    renderingMode: {
+      type: String,
+      enum: ['preserve-structure', 'realistic-enhancement', 'creative-redesign'],
+      default: 'preserve-structure',
+    },
+    geometryStrength: { type: Number, default: 0.85 },
     environment: { type: String, default: 'landscaped-gardens' },
     aspectRatio: {
       type: String,
@@ -134,7 +142,8 @@ renderSchema.methods.toRenderJSON = function () {
     style: this.style,
     engine: this.engine || 'hyperreal',
     lighting: this.lighting || 'golden-hour',
-    geometryStrength: this.geometryStrength ?? 0.42,
+    renderingMode: this.renderingMode || 'preserve-structure',
+    geometryStrength: this.geometryStrength ?? 0.85,
     environment: this.environment || 'landscaped-gardens',
     aspectRatio: this.aspectRatio,
     imageUrl: this.imageUrl,

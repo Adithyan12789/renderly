@@ -56,7 +56,45 @@ import type {
   RenderEngine,
   RenderLighting,
   RenderStyle,
+  RenderingMode,
 } from '@/types'
+
+export const RENDERING_MODES: {
+  value: RenderingMode
+  label: string
+  badge: string
+  tagline: string
+  description: string
+  defaultStrength: number
+}[] = [
+  {
+    value: 'preserve-structure',
+    label: 'Preserve Structure',
+    badge: 'Default · 1:1 Match',
+    tagline: 'Strict Geometry & Silhouette Retention',
+    description:
+      'Prioritizes 1:1 match to original uploaded image. Preserves floor levels, wall boundaries, window and door positions, and camera framing with photorealistic materials.',
+    defaultStrength: 0.85,
+  },
+  {
+    value: 'realistic-enhancement',
+    label: 'Realistic Enhancement',
+    badge: 'Photorealism',
+    tagline: 'Material & Lighting Elevation',
+    description:
+      'Preserves architectural bones while significantly upgrading physical depth, rich surface textures, and refined environmental reflections.',
+    defaultStrength: 0.68,
+  },
+  {
+    value: 'creative-redesign',
+    label: 'Creative Redesign',
+    badge: 'Creative Freedom',
+    tagline: 'Artistic Architectural Variation',
+    description:
+      'Uses the uploaded model as reference while exploring creative architectural styling, alternative facade finishes, and dramatic atmosphere.',
+    defaultStrength: 0.50,
+  },
+]
 
 const ASPECT_RATIOS: { value: RenderAspectRatio; label: string; aspectClass: string }[] = [
   { value: '16:9', label: '16:9 Landscape', aspectClass: 'aspect-[16/9]' },
@@ -96,18 +134,27 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const generatorRef = useRef<HTMLDivElement>(null)
 
   // Vibe3D Control Parameters
+  const [selectedRenderingMode, setSelectedRenderingMode] = useState<RenderingMode>('preserve-structure')
   const [selectedEngine, setSelectedEngine] = useState<RenderEngine>('hyperreal')
   const [selectedLighting, setSelectedLighting] = useState<RenderLighting>('golden-hour')
   const [selectedStyle, setSelectedStyle] = useState<RenderStyle>('modern-luxury')
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>(
     mode === 'interior' ? 'interior-living' : 'landscaped-gardens',
   )
-  const [geometryStrength, setGeometryStrength] = useState<number>(0.42)
+  const [geometryStrength, setGeometryStrength] = useState<number>(0.85)
   const [selectedAspect, setSelectedAspect] = useState<RenderAspectRatio>('16:9')
   const [refinementPrompt, setRefinementPrompt] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false)
   const [setAsThumbnail, setSetAsThumbnail] = useState<boolean>(false)
+
+  function handleSelectRenderingMode(m: RenderingMode) {
+    setSelectedRenderingMode(m)
+    const config = RENDERING_MODES.find((item) => item.value === m)
+    if (config) {
+      setGeometryStrength(config.defaultStrength)
+    }
+  }
 
   // Modal / Lightbox State
   const [activeLightboxRender, setActiveLightboxRender] = useState<Render | null>(null)
@@ -283,6 +330,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
         style: selectedStyle,
         engine: selectedEngine,
         lighting: selectedLighting,
+        renderingMode: selectedRenderingMode,
         environment: selectedEnvironment,
         geometryStrength,
         aspectRatio: selectedAspect,
@@ -519,11 +567,61 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
             </div>
           </div>
 
-          {/* 2. Vibe3D Render Engine Mode */}
+          {/* 2. Architectural Rendering Mode (Preserve Structure / Realistic Enhancement / Creative Redesign) */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold tracking-wide text-foreground flex items-center gap-2">
+                <span>2. Architectural Rendering Mode</span>
+                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                  Strict Geometry Preservation
+                </span>
+              </label>
+              <span className="text-xs text-muted">Controls how strictly the uploaded model geometry is preserved</span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {RENDERING_MODES.map((m) => {
+                const isSelected = selectedRenderingMode === m.value
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => handleSelectRenderingMode(m.value)}
+                    className={cn(
+                      'group relative flex flex-col items-start gap-1.5 rounded-2xl border p-4 text-left transition-all',
+                      isSelected
+                        ? 'border-accent bg-accent/[0.09] ring-1 ring-accent shadow-md shadow-accent/5'
+                        : 'border-border bg-background/60 hover:border-border-strong hover:bg-background',
+                    )}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="text-sm font-semibold text-foreground">{m.label}</span>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                          isSelected
+                            ? 'bg-accent text-white'
+                            : 'bg-white/5 text-muted',
+                        )}
+                      >
+                        {m.badge}
+                      </span>
+                    </div>
+                    <span className="text-xs font-medium text-accent/90">{m.tagline}</span>
+                    <p className="text-[11px] text-muted leading-relaxed line-clamp-2">
+                      {m.description}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 3. Vibe3D Render Engine Mode */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold tracking-wide text-foreground">
-                2. AI Render Engine Mode
+                3. AI Render Engine Mode
               </label>
               <span className="text-xs text-muted">Ray-tracing & material calculation profiles</span>
             </div>
@@ -566,11 +664,11 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
             </div>
           </div>
 
-          {/* 3. Scene Lighting (Vibe3D Relighting) */}
+          {/* 4. Scene Lighting (Vibe3D Relighting) */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold tracking-wide text-foreground">
-                3. Scene Lighting & Time of Day
+                4. Scene Lighting & Time of Day
               </label>
               <span className="text-xs text-muted">Vibe3D instant relighting preset</span>
             </div>
@@ -600,11 +698,11 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
             </div>
           </div>
 
-          {/* 4. Architectural Style Preset */}
+          {/* 5. Architectural Style Preset */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold tracking-wide text-foreground">
-                4. Architectural Style & Material Palette
+                5. Architectural Style & Material Palette
               </label>
               <span className="text-xs text-muted">{ARCHITECTURAL_STYLES.length} curated profiles</span>
             </div>
@@ -635,7 +733,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
             </div>
           </div>
 
-          {/* 5. Environment & Geometry Strength Sliders */}
+          {/* 6. Environment & Geometry Strength Sliders */}
           <div className="grid gap-6 sm:grid-cols-2">
             {/* Surroundings / Environment */}
             <div className="flex flex-col gap-2">
@@ -662,32 +760,32 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                   <Sliders className="size-3.5 text-accent" />
                   <span>Geometry Adherence: {(geometryStrength * 100).toFixed(0)}%</span>
                 </label>
-                <span className="text-[11px] text-muted">
-                  {geometryStrength <= 0.35
-                    ? 'Strict Structural Lines'
-                    : geometryStrength <= 0.48
-                    ? 'Balanced Photorealism'
-                    : 'Creative Realism'}
+                <span className="text-[11px] font-medium text-accent">
+                  {geometryStrength >= 0.80
+                    ? 'Preserve Structure (1:1 Match)'
+                    : geometryStrength >= 0.60
+                    ? 'Realistic Enhancement'
+                    : 'Creative Redesign'}
                 </span>
               </div>
               <input
                 type="range"
-                min="0.25"
-                max="0.65"
+                min="0.30"
+                max="0.95"
                 step="0.01"
                 value={geometryStrength}
                 onChange={(e) => setGeometryStrength(parseFloat(e.target.value))}
                 className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-surface-raised accent-accent"
               />
               <div className="flex justify-between text-[10px] text-muted">
-                <span>0.25 (Strict Geometry)</span>
-                <span>0.42 (Optimal Vibe3D)</span>
-                <span>0.65 (Richer Materials)</span>
+                <span>0.30 (Creative Variation)</span>
+                <span>0.68 (Realistic Balance)</span>
+                <span>0.85 (Strict 1:1 Preservation)</span>
               </div>
             </div>
           </div>
 
-          {/* 6. Aspect Ratio & Project Link */}
+          {/* 7. Aspect Ratio & Project Link */}
           <div className="grid gap-6 sm:grid-cols-2">
             {/* Aspect Ratio */}
             <div className="flex flex-col gap-2">
@@ -994,10 +1092,15 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                             >
                               {render.prompt}
                             </Link>
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
                               {render.metadata?.category && (
                                 <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent capitalize">
                                   {render.metadata.category}
+                                </span>
+                              )}
+                              {render.renderingMode && (
+                                <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-foreground capitalize">
+                                  {render.renderingMode.replace('-', ' ')}
                                 </span>
                               )}
                               <span className="capitalize">
@@ -1005,7 +1108,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                               </span>
                               <span>·</span>
                               <span>
-                                {(render.geometryStrength ? render.geometryStrength * 100 : 42).toFixed(0)}% adherence
+                                {(render.geometryStrength ? render.geometryStrength * 100 : 85).toFixed(0)}% adherence
                               </span>
                             </div>
                           </div>

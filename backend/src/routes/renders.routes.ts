@@ -32,8 +32,11 @@ const generateRenderSchema = z
       .default('modern-luxury'),
     engine: z.enum(['hyperreal', 'lumen', 'fidelity']).default('hyperreal'),
     lighting: z.enum(['golden-hour', 'daylight', 'dusk', 'overcast', 'night']).default('golden-hour'),
+    renderingMode: z
+      .enum(['preserve-structure', 'realistic-enhancement', 'creative-redesign'])
+      .default('preserve-structure'),
     environment: z.string().trim().default('landscaped-gardens'),
-    geometryStrength: z.coerce.number().min(0.1).max(0.9).default(0.42),
+    geometryStrength: z.coerce.number().min(0.1).max(1.0).default(0.85),
     aspectRatio: z.enum(['16:9', '4:3', '1:1', '9:16']).optional(),
     projectId: z.string().trim().optional().nullable(),
     setAsThumbnail: z.boolean().default(false),
@@ -269,6 +272,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
         style: payload.style,
         engine: payload.engine,
         lighting: payload.lighting,
+        renderingMode: payload.renderingMode,
         environment: payload.environment,
         geometryStrength: payload.geometryStrength,
         refinementPrompt: payload.refinementPrompt || payload.prompt,
@@ -280,8 +284,9 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
         const styleName = payload.style.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
         const lightingName = payload.lighting.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
         const engineName = payload.engine.replace(/\b\w/g, (c) => c.toUpperCase())
+        const modeLabel = payload.renderingMode === 'preserve-structure' ? 'Preserve Structure' : payload.renderingMode === 'realistic-enhancement' ? 'Realistic Enhancement' : 'Creative Redesign'
         const categoryLabel = payload.category === 'interior' ? 'Interior' : 'Exterior'
-        finalPrompt = `${engineName} ${styleName} ${categoryLabel} · ${lightingName}`
+        finalPrompt = `${engineName} ${styleName} ${categoryLabel} · ${lightingName} (${modeLabel})`
       }
     } else {
       // 2. Legacy prompt-only generation
@@ -302,6 +307,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       style: payload.style,
       engine: payload.engine,
       lighting: payload.lighting,
+      renderingMode: payload.renderingMode,
       geometryStrength: payload.geometryStrength,
       environment: payload.environment,
       aspectRatio: genResult.aspectRatio || payload.aspectRatio || '16:9',

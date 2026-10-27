@@ -735,9 +735,15 @@ export function RenderStudioPage() {
                 </p>
               </div>
               <div>
+                <span className="text-muted text-[11px]">Rendering Mode</span>
+                <p className="font-semibold text-foreground mt-0.5 capitalize">
+                  {activeRender.renderingMode?.replace('-', ' ') || 'Preserve Structure'}
+                </p>
+              </div>
+              <div>
                 <span className="text-muted text-[11px]">Geometry Adherence</span>
                 <p className="font-semibold text-foreground mt-0.5">
-                  {(activeRender.geometryStrength ? activeRender.geometryStrength * 100 : 42).toFixed(0)}%
+                  {(activeRender.geometryStrength ? activeRender.geometryStrength * 100 : 85).toFixed(0)}%
                 </p>
               </div>
             </div>
