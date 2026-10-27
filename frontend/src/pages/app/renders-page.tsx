@@ -1,20 +1,16 @@
 import {
   Box,
-  Check,
   Download,
   Folder,
   FolderPlus,
   Image as ImageIcon,
   Loader2,
   Plus,
-  RefreshCw,
-  Sliders,
   Sparkles,
   Trash2,
-  UploadCloud,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BeforeAfterSlider } from '@/components/app/before-after-slider'
 import { CinematicFlythroughModal } from '@/components/app/cinematic-flythrough-modal'
@@ -34,17 +30,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { getErrorMessage, resolveImageUrl } from '@/lib/api'
 import { buildExteriorPrompt, buildInteriorPrompt } from '@/lib/prompt-builder'
 import {
-  ARCHITECTURAL_STYLES,
-  EXTERIOR_ENVIRONMENT_PRESETS,
   EXTERIOR_MATERIAL_TAGS,
-  EXTERIOR_SAMPLE_MODELS,
-  INTERIOR_ENVIRONMENT_PRESETS,
-  INTERIOR_LIGHTING_PRESETS,
   INTERIOR_MATERIAL_TAGS,
-  INTERIOR_SAMPLE_MODELS,
-  LIGHTING_PRESETS,
-  RENDER_ENGINES,
-  SAMPLE_3D_MODELS,
 } from '@/lib/site-content'
 import { cn } from '@/lib/utils'
 import { projectsService } from '@/services/projects'
@@ -63,50 +50,6 @@ import type {
   RenderingMode,
 } from '@/types'
 
-export const RENDERING_MODES: {
-  value: RenderingMode
-  label: string
-  badge: string
-  tagline: string
-  description: string
-  defaultStrength: number
-}[] = [
-  {
-    value: 'preserve-structure',
-    label: 'Preserve Structure',
-    badge: 'Default · 1:1 Match',
-    tagline: 'Strict Geometry & Silhouette Retention',
-    description:
-      'Prioritizes 1:1 match to original uploaded image. Preserves floor levels, wall boundaries, window and door positions, and camera framing with photorealistic materials.',
-    defaultStrength: 0.85,
-  },
-  {
-    value: 'realistic-enhancement',
-    label: 'Realistic Enhancement',
-    badge: 'Photorealism',
-    tagline: 'Material & Lighting Elevation',
-    description:
-      'Preserves architectural bones while significantly upgrading physical depth, rich surface textures, and refined environmental reflections.',
-    defaultStrength: 0.68,
-  },
-  {
-    value: 'creative-redesign',
-    label: 'Creative Redesign',
-    badge: 'Creative Freedom',
-    tagline: 'Artistic Architectural Variation',
-    description:
-      'Uses the uploaded model as reference while exploring creative architectural styling, alternative facade finishes, and dramatic atmosphere.',
-    defaultStrength: 0.50,
-  },
-]
-
-const ASPECT_RATIOS: { value: RenderAspectRatio; label: string; aspectClass: string }[] = [
-  { value: '16:9', label: '16:9 Landscape', aspectClass: 'aspect-[16/9]' },
-  { value: '4:3', label: '4:3 Standard', aspectClass: 'aspect-[4/3]' },
-  { value: '1:1', label: '1:1 Square', aspectClass: 'aspect-square' },
-  { value: '9:16', label: '9:16 Portrait', aspectClass: 'aspect-[9/16]' },
-]
-
 interface RendersPageProps {
   mode?: RenderCategory
 }
@@ -115,10 +58,6 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const [searchParams] = useSearchParams()
   const initialProjectId = searchParams.get('projectId')
 
-  const environmentPresets =
-    mode === 'interior' ? INTERIOR_ENVIRONMENT_PRESETS : EXTERIOR_ENVIRONMENT_PRESETS
-  const lightingPresets = mode === 'interior' ? INTERIOR_LIGHTING_PRESETS : LIGHTING_PRESETS
-  const sampleModels = mode === 'interior' ? INTERIOR_SAMPLE_MODELS : EXTERIOR_SAMPLE_MODELS
   const materialTags = mode === 'interior' ? INTERIOR_MATERIAL_TAGS : EXTERIOR_MATERIAL_TAGS
 
   const [renders, setRenders] = useState<Render[]>([])
@@ -130,22 +69,17 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
 
   // Uploaded 3D Model / Source Image State
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-  const [uploadedImageName, setUploadedImageName] = useState<string>('')
-  const [uploadedImageSize, setUploadedImageSize] = useState<string>('')
-  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null)
-  const [isDraggingFile, setIsDraggingFile] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const generatorRef = useRef<HTMLDivElement>(null)
 
   // Vibe3D Control Parameters
-  const [selectedRenderingMode, setSelectedRenderingMode] = useState<RenderingMode>('preserve-structure')
-  const [selectedEngine, setSelectedEngine] = useState<RenderEngine>('hyperreal')
-  const [selectedLighting, setSelectedLighting] = useState<RenderLighting>('golden-hour')
-  const [selectedStyle, setSelectedStyle] = useState<RenderStyle>('modern-luxury')
+  const [selectedRenderingMode] = useState<RenderingMode>('preserve-structure')
+  const [selectedEngine] = useState<RenderEngine>('hyperreal')
+  const [selectedLighting] = useState<RenderLighting>('golden-hour')
+  const [selectedStyle] = useState<RenderStyle>('modern-luxury')
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>(
     mode === 'interior' ? 'interior-living' : 'landscaped-gardens',
   )
-  const [geometryStrength, setGeometryStrength] = useState<number>(0.85)
+  const [geometryStrength] = useState<number>(0.85)
   const [selectedAspect, setSelectedAspect] = useState<RenderAspectRatio>('16:9')
   const [refinementPrompt, setRefinementPrompt] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
@@ -224,14 +158,6 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
     return buildExteriorPrompt(exteriorSettings, refinementPrompt)
   }, [mode, interiorSettings, exteriorSettings, refinementPrompt])
 
-  function handleSelectRenderingMode(m: RenderingMode) {
-    setSelectedRenderingMode(m)
-    const config = RENDERING_MODES.find((item) => item.value === m)
-    if (config) {
-      setGeometryStrength(config.defaultStrength)
-    }
-  }
-
   // Modal / Lightbox State
   const [activeLightboxRender, setActiveLightboxRender] = useState<Render | null>(null)
   const [activeFlythroughRender, setActiveFlythroughRender] = useState<Render | null>(null)
@@ -248,10 +174,8 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   useEffect(() => {
     try {
       const captured3d = sessionStorage.getItem('renderly_captured_3d_viewport')
-      const capturedName = sessionStorage.getItem('renderly_captured_model_name')
       if (captured3d) {
         setUploadedImage(captured3d)
-        setUploadedImageName(capturedName ? `3D Capture (${capturedName})` : '3D Viewport Angle')
         sessionStorage.removeItem('renderly_captured_3d_viewport')
         sessionStorage.removeItem('renderly_captured_model_name')
         toast.success('3D Viewport angle loaded! Ready to synthesize render.')
@@ -287,12 +211,9 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
     }
   }, [initialProjectId])
 
-  // Reset environment and sample on mode change or mount
+  // Reset environment on mode change or mount
   useEffect(() => {
     setSelectedEnvironment(mode === 'interior' ? 'interior-living' : 'landscaped-gardens')
-    if (sampleModels.length > 0) {
-      handleSelectSample(sampleModels[0].id)
-    }
   }, [mode])
 
   function handleFileSelect(file: File) {
@@ -310,9 +231,6 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
     reader.onload = (e) => {
       const result = e.target?.result as string
       setUploadedImage(result)
-      setUploadedImageName(file.name)
-      setUploadedImageSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`)
-      setSelectedSampleId(null)
 
       // Auto detect aspect ratio
       const img = new Image()
@@ -325,50 +243,18 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
       }
       img.src = result
 
-      toast.success('3D model capture uploaded successfully!', 'Ready to render')
+      toast.success(
+        mode === 'interior'
+          ? 'Room reference image attached!'
+          : 'Structural reference image attached!',
+        'Ready to render',
+      )
     }
     reader.readAsDataURL(file)
   }
 
-  function handleDragOver(e: DragEvent) {
-    e.preventDefault()
-    setIsDraggingFile(true)
-  }
-
-  function handleDragLeave(e: DragEvent) {
-    e.preventDefault()
-    setIsDraggingFile(false)
-  }
-
-  function handleDrop(e: DragEvent) {
-    e.preventDefault()
-    setIsDraggingFile(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0])
-    }
-  }
-
-  function handleSelectSample(sampleId: string) {
-    const sample =
-      sampleModels.find((s) => s.id === sampleId) ||
-      SAMPLE_3D_MODELS.find((s) => s.id === sampleId)
-    if (!sample) return
-
-    setSelectedSampleId(sample.id)
-    setUploadedImage(sample.thumbnailUrl)
-    setUploadedImageName(`${sample.title} (${sample.category})`)
-    setUploadedImageSize('Preset Model')
-    setSelectedAspect(sample.aspectRatio)
-  }
-
   function handleClearImage() {
     setUploadedImage(null)
-    setUploadedImageName('')
-    setUploadedImageSize('')
-    setSelectedSampleId(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
   }
 
   function handleAddMaterialTag(tag: string) {
@@ -495,483 +381,89 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
         <div className="absolute top-0 right-0 -mr-20 -mt-20 size-80 rounded-full bg-accent/5 blur-3xl pointer-events-none" />
 
         <form onSubmit={handleGenerate} className="flex flex-col gap-8">
-          {/* 1. Image Upload Dropzone (Primary Input) */}
-          <div className="flex flex-col gap-3">
+          {/* Project Selection (Required) */}
+          <div className="flex flex-col gap-2 rounded-2xl border border-border/70 bg-background/50 p-4 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold tracking-wide text-foreground">
-                1. 3D Model Viewport / Photo Input
+              <label htmlFor="project-select" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Folder className="size-4 text-accent" />
+                <span>Assigned Project</span>
+                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
+                  Required
+                </span>
               </label>
-              <span className="text-xs text-muted">
-                Accepts SketchUp, Revit, Rhino, Archicad, Blender exports or photos
-              </span>
+              <button
+                type="button"
+                onClick={() => setIsCreateProjectOpen(true)}
+                className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+              >
+                <Plus className="size-3.5" />
+                <span>New Project</span>
+              </button>
             </div>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFileSelect(e.target.files[0])
-                }
-              }}
-              className="hidden"
-            />
-
-            {!uploadedImage ? (
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  'group relative flex flex-col items-center justify-center gap-3.5 rounded-2xl border-2 border-dashed p-8 text-center transition-all cursor-pointer',
-                  isDraggingFile
-                    ? 'border-accent bg-accent/10 scale-[0.99]'
-                    : 'border-border/80 bg-background/50 hover:border-accent/60 hover:bg-background/80',
-                )}
-              >
-                <div className="grid size-14 place-items-center rounded-2xl border border-border bg-surface shadow-inner group-hover:scale-110 transition-transform">
-                  <UploadCloud className="size-7 text-accent" />
+            {projects.length === 0 ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-xl bg-accent/20 text-accent">
+                    <FolderPlus className="size-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">A project is required to create renders</p>
+                    <p className="text-[11px] text-muted">Create a project first to organize and synthesize your visualizations.</p>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1 max-w-md">
-                  <p className="text-sm font-medium text-foreground">
-                    Click to browse or drag & drop 3D model screenshot
-                  </p>
-                  <p className="text-xs text-muted leading-relaxed">
-                    Clay render, massing model, wireframe, or raw untextured camera view. PNG, JPG, WebP up to 20MB.
-                  </p>
-                </div>
+                <Button type="button" size="sm" onClick={() => setIsCreateProjectOpen(true)}>
+                  <Plus className="size-3.5" /> Create Project
+                </Button>
               </div>
             ) : (
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-background/70 p-4 backdrop-blur-md">
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {/* Thumbnail Preview */}
-                  <div className="relative aspect-[16/9] w-full sm:w-56 shrink-0 overflow-hidden rounded-xl border border-border bg-black">
-                    <img
-                      src={uploadedImage}
-                      alt="Uploaded Model Preview"
-                      className="size-full object-cover"
-                    />
-                    <div className="absolute top-2 left-2">
-                      <span className="rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md uppercase">
-                        {selectedAspect} Model
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Metadata and Replacement Actions */}
-                  <div className="flex flex-1 flex-col justify-between gap-3 w-full">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <p className="text-sm font-semibold text-foreground truncate">
-                          {uploadedImageName || '3D Model Viewport'}
-                        </p>
-                      </div>
-                      <p className="mt-1 text-xs text-muted">
-                        {uploadedImageSize} · Preserves building massing, geometry & openings
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-2 border-t border-border/40">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-xs"
-                      >
-                        <RefreshCw className="size-3" />
-                        Replace Image
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleClearImage}
-                        className="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                      >
-                        <X className="size-3" />
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Sample 3D Models Bar */}
-            <div className="flex flex-col gap-2 pt-1">
-              <span className="text-xs font-medium text-muted">
-                {mode === 'interior'
-                  ? 'No interior blockout right now? Try a curated room preset:'
-                  : 'No 3D model right now? Try a curated viewport preset:'}
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {sampleModels.map((sample) => {
-                  const isSelected = selectedSampleId === sample.id
-                  return (
-                    <button
-                      key={sample.id}
-                      type="button"
-                      onClick={() => handleSelectSample(sample.id)}
-                      className={cn(
-                        'group flex items-center gap-3 rounded-xl border p-2 text-left transition-all',
-                        isSelected
-                          ? 'border-accent bg-accent/15 ring-1 ring-accent'
-                          : 'border-border bg-background/50 hover:border-border-strong hover:bg-background',
-                      )}
-                    >
-                      <img
-                        src={sample.thumbnailUrl}
-                        alt={sample.title}
-                        className="size-11 shrink-0 rounded-lg object-cover border border-border"
-                      />
-                      <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-foreground truncate">
-                            {sample.title}
-                          </span>
-                          {isSelected && <Check className="size-3 text-accent shrink-0" />}
-                        </div>
-                        <span className="text-[11px] text-muted truncate">
-                          {sample.category}
-                        </span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* 2. Architectural Rendering Mode (Preserve Structure / Realistic Enhancement / Creative Redesign) */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold tracking-wide text-foreground flex items-center gap-2">
-                <span>2. Architectural Rendering Mode</span>
-                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
-                  Strict Geometry Preservation
-                </span>
-              </label>
-              <span className="text-xs text-muted">Controls how strictly the uploaded model geometry is preserved</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {RENDERING_MODES.map((m) => {
-                const isSelected = selectedRenderingMode === m.value
-                return (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => handleSelectRenderingMode(m.value)}
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <select
+                    id="project-select"
+                    required
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
                     className={cn(
-                      'group relative flex flex-col items-start gap-1.5 rounded-2xl border p-4 text-left transition-all',
-                      isSelected
-                        ? 'border-accent bg-accent/[0.09] ring-1 ring-accent shadow-md shadow-accent/5'
-                        : 'border-border bg-background/60 hover:border-border-strong hover:bg-background',
+                      'h-10 w-full rounded-xl border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none',
+                      !selectedProjectId ? 'border-accent ring-1 ring-accent/30' : 'border-border',
                     )}
                   >
-                    <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">{m.label}</span>
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
-                          isSelected
-                            ? 'bg-accent text-white'
-                            : 'bg-white/5 text-muted',
-                        )}
-                      >
-                        {m.badge}
-                      </span>
-                    </div>
-                    <span className="text-xs font-medium text-accent/90">{m.tagline}</span>
-                    <p className="text-[11px] text-muted leading-relaxed line-clamp-2">
-                      {m.description}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+                    <option value="" disabled>
+                      — Select a project (Required) —
+                    </option>
+                    {projects.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.name} ({proj.type})
+                      </option>
+                    ))}
+                  </select>
 
-          {/* 3. Vibe3D Render Engine Mode */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold tracking-wide text-foreground">
-                3. AI Render Engine Mode
-              </label>
-              <span className="text-xs text-muted">Ray-tracing & material calculation profiles</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {RENDER_ENGINES.map((engine) => {
-                const isSelected = selectedEngine === engine.value
-                return (
-                  <button
-                    key={engine.value}
+                  <Button
                     type="button"
-                    onClick={() => setSelectedEngine(engine.value)}
-                    className={cn(
-                      'group relative flex flex-col items-start gap-1.5 rounded-2xl border p-4 text-left transition-all',
-                      isSelected
-                        ? 'border-accent bg-accent/[0.09] ring-1 ring-accent shadow-md shadow-accent/5'
-                        : 'border-border bg-background/60 hover:border-border-strong hover:bg-background',
-                    )}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCreateProjectOpen(true)}
+                    className="shrink-0 gap-1.5 h-10 px-3.5"
                   >
-                    <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-semibold text-foreground">{engine.label}</span>
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
-                          isSelected
-                            ? 'bg-accent text-white'
-                            : 'bg-white/5 text-muted',
-                        )}
-                      >
-                        {engine.badge}
-                      </span>
-                    </div>
-                    <span className="text-xs font-medium text-accent/90">{engine.tagline}</span>
-                    <p className="text-[11px] text-muted leading-relaxed line-clamp-2">
-                      {engine.description}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* 4. Scene Lighting (Vibe3D Relighting) */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold tracking-wide text-foreground">
-                4. Scene Lighting & Time of Day
-              </label>
-              <span className="text-xs text-muted">Vibe3D instant relighting preset</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
-              {lightingPresets.map((light) => {
-                const isSelected = selectedLighting === light.value
-                return (
-                  <button
-                    key={light.value}
-                    type="button"
-                    onClick={() => setSelectedLighting(light.value)}
-                    className={cn(
-                      'flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
-                      isSelected
-                        ? 'border-accent bg-accent/15 ring-1 ring-accent text-foreground'
-                        : 'border-border bg-background/60 text-muted hover:border-border-strong hover:text-foreground',
-                    )}
-                  >
-                    <span className="text-xs font-semibold text-foreground">{light.label}</span>
-                    <span className="text-[10px] text-muted leading-tight line-clamp-2">
-                      {light.tagline}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* 5. Architectural Style Preset */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold tracking-wide text-foreground">
-                5. Architectural Style & Material Palette
-              </label>
-              <span className="text-xs text-muted">{ARCHITECTURAL_STYLES.length} curated profiles</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4">
-              {ARCHITECTURAL_STYLES.map((style) => {
-                const isSelected = selectedStyle === style.value
-                return (
-                  <button
-                    key={style.value}
-                    type="button"
-                    onClick={() => setSelectedStyle(style.value)}
-                    className={cn(
-                      'group relative flex flex-col items-start gap-1.5 rounded-2xl border p-3.5 text-left transition-all',
-                      isSelected
-                        ? 'border-accent bg-accent/[0.08] ring-1 ring-accent shadow-md shadow-accent/5'
-                        : 'border-border bg-background/60 hover:border-border-strong hover:bg-background',
-                    )}
-                  >
-                    <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">{style.label}</span>
-                      {isSelected && <span className="size-2 rounded-full bg-accent" />}
-                    </div>
-                    <span className="text-[11px] leading-tight text-muted">{style.tagline}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* 6. Environment & Geometry Strength Sliders */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {/* Surroundings / Environment */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-foreground">
-                {mode === 'interior' ? 'Room Space & Atmosphere' : 'Surroundings & Landscape'}
-              </label>
-              <select
-                value={selectedEnvironment}
-                onChange={(e) => setSelectedEnvironment(e.target.value)}
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none"
-              >
-                {environmentPresets.map((env) => (
-                  <option key={env.value} value={env.value}>
-                    {env.label} ({env.tagline})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Geometry Adherence / Structural Strength Slider */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <Sliders className="size-3.5 text-accent" />
-                  <span>Geometry Adherence: {(geometryStrength * 100).toFixed(0)}%</span>
-                </label>
-                <span className="text-[11px] font-medium text-accent">
-                  {geometryStrength >= 0.80
-                    ? 'Preserve Structure (1:1 Match)'
-                    : geometryStrength >= 0.60
-                    ? 'Realistic Enhancement'
-                    : 'Creative Redesign'}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0.30"
-                max="0.95"
-                step="0.01"
-                value={geometryStrength}
-                onChange={(e) => setGeometryStrength(parseFloat(e.target.value))}
-                className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-surface-raised accent-accent"
-              />
-              <div className="flex justify-between text-[10px] text-muted">
-                <span>0.30 (Creative Variation)</span>
-                <span>0.68 (Realistic Balance)</span>
-                <span>0.85 (Strict 1:1 Preservation)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 7. Aspect Ratio & Project Link */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {/* Aspect Ratio */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-foreground">Render Aspect Ratio</label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {ASPECT_RATIOS.map((ratio) => (
-                  <button
-                    key={ratio.value}
-                    type="button"
-                    onClick={() => setSelectedAspect(ratio.value)}
-                    className={cn(
-                      'flex items-center justify-center rounded-xl border py-2 text-xs font-medium transition-colors',
-                      selectedAspect === ratio.value
-                        ? 'border-accent bg-accent/10 text-foreground'
-                        : 'border-border bg-background text-muted hover:border-border-strong hover:text-foreground',
-                    )}
-                  >
-                    {ratio.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Project Selection (Required) */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="project-select" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Folder className="size-4 text-accent" />
-                  <span>Assigned Project</span>
-                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
-                    Required
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateProjectOpen(true)}
-                  className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
-                >
-                  <Plus className="size-3.5" />
-                  <span>New Project</span>
-                </button>
-              </div>
-
-              {projects.length === 0 ? (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="grid size-9 place-items-center rounded-xl bg-accent/20 text-accent">
-                      <FolderPlus className="size-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">A project is required to create renders</p>
-                      <p className="text-[11px] text-muted">Create a project first to organize and synthesize your visualizations.</p>
-                    </div>
-                  </div>
-                  <Button type="button" size="sm" onClick={() => setIsCreateProjectOpen(true)}>
-                    <Plus className="size-3.5" /> Create Project
+                    <Plus className="size-4" />
+                    <span className="hidden sm:inline">New Project</span>
                   </Button>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <select
-                      id="project-select"
-                      required
-                      value={selectedProjectId}
-                      onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className={cn(
-                        'h-10 w-full rounded-xl border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none',
-                        !selectedProjectId ? 'border-accent ring-1 ring-accent/30' : 'border-border',
-                      )}
-                    >
-                      <option value="" disabled>
-                        — Select a project (Required) —
-                      </option>
-                      {projects.map((proj) => (
-                        <option key={proj.id} value={proj.id}>
-                          {proj.name} ({proj.type})
-                        </option>
-                      ))}
-                    </select>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsCreateProjectOpen(true)}
-                      className="shrink-0 gap-1.5 h-10 px-3.5"
-                    >
-                      <Plus className="size-4" />
-                      <span className="hidden sm:inline">New Project</span>
-                    </Button>
-                  </div>
-
-                  {selectedProjectId && (
-                    <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-muted">
-                      <input
-                        type="checkbox"
-                        checked={setAsThumbnail}
-                        onChange={(e) => setSetAsThumbnail(e.target.checked)}
-                        className="size-4 rounded border-border bg-background text-accent accent-accent"
-                      />
-                      <span>Set this render as the project cover thumbnail</span>
-                    </label>
-                  )}
-                </div>
-              )}
-            </div>
+                {selectedProjectId && (
+                  <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={setAsThumbnail}
+                      onChange={(e) => setSetAsThumbnail(e.target.checked)}
+                      className="size-4 rounded border-border bg-background text-accent accent-accent"
+                    />
+                    <span>Set this render as the project cover thumbnail</span>
+                  </label>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Detailed Architectural Configurations (exterior.txt / interior.txt) */}
@@ -996,6 +488,9 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
 
             <RenderingOptionsPanel
               mode={mode}
+              uploadedImage={uploadedImage}
+              onUploadedImageSelect={handleFileSelect}
+              onUploadedImageClear={handleClearImage}
               exteriorSettings={exteriorSettings}
               onUpdateExterior={(settings) => setExteriorSettings((prev) => ({ ...prev, ...settings }))}
               interiorSettings={interiorSettings}

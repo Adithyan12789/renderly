@@ -14,7 +14,6 @@ import {
   Sun,
   UploadCloud,
   Users,
-  X,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -48,6 +47,9 @@ import type { ExteriorRenderingSettings, InteriorRenderingSettings, RenderCatego
 
 interface RenderingOptionsPanelProps {
   mode: RenderCategory
+  uploadedImage: string | null
+  onUploadedImageSelect: (file: File) => void
+  onUploadedImageClear: () => void
   exteriorSettings: ExteriorRenderingSettings
   onUpdateExterior: (settings: Partial<ExteriorRenderingSettings>) => void
   interiorSettings: InteriorRenderingSettings
@@ -60,6 +62,9 @@ interface RenderingOptionsPanelProps {
 
 export function RenderingOptionsPanel({
   mode,
+  uploadedImage,
+  onUploadedImageSelect,
+  onUploadedImageClear,
   exteriorSettings,
   onUpdateExterior,
   interiorSettings,
@@ -86,7 +91,10 @@ export function RenderingOptionsPanel({
   })
 
   const [copiedPrompt, setCopiedPrompt] = useState(false)
+  const primaryFileInputRef = useRef<HTMLInputElement>(null)
   const locationFileInputRef = useRef<HTMLInputElement>(null)
+  const [isDraggingPrimary, setIsDraggingPrimary] = useState(false)
+  const [isDraggingLocation, setIsDraggingLocation] = useState(false)
 
   function toggleSection(sectionKey: string) {
     setCollapsedSections((prev) => ({
@@ -132,17 +140,22 @@ export function RenderingOptionsPanel({
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold text-foreground">
-                    1. Site & Location Reference Images
+                    1. Reference Images (Structural & Location)
                   </h4>
                   <p className="text-xs text-muted">
-                    Structural image is primary; optional location image guides surrounding context
+                    Structural image locks building architecture; optional location image guides surroundings
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-muted">
-                {locationImage && (
+                {uploadedImage && (
                   <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                    Location Image Active
+                    Structural Image Attached
+                  </span>
+                )}
+                {locationImage && (
+                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                    Location Image Attached
                   </span>
                 )}
                 {collapsedSections.siteRef ? (
@@ -156,11 +169,106 @@ export function RenderingOptionsPanel({
             {!collapsedSections.siteRef && (
               <div className="border-t border-border/50 p-4 pt-3 flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Location Image Upload Dropzone */}
+                  {/* Primary Structural Reference Image */}
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      <span>Location / Environment Image (Optional)</span>
-                      <span className="text-[11px] font-normal text-muted">Guides climate & surroundings</span>
+                      <span className="flex items-center gap-1.5">
+                        <span>Structural Reference Image</span>
+                        <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[9px] font-semibold text-accent uppercase">
+                          Primary
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-normal text-muted">Preserves 100% massing & openings</span>
+                    </label>
+
+                    <input
+                      ref={primaryFileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          onUploadedImageSelect(e.target.files[0])
+                        }
+                      }}
+                    />
+
+                    {!uploadedImage ? (
+                      <div
+                        onClick={() => primaryFileInputRef.current?.click()}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setIsDraggingPrimary(true)
+                        }}
+                        onDragLeave={() => setIsDraggingPrimary(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setIsDraggingPrimary(false)
+                          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                            onUploadedImageSelect(e.dataTransfer.files[0])
+                          }
+                        }}
+                        className={cn(
+                          'group flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all',
+                          isDraggingPrimary
+                            ? 'border-accent bg-accent/15 scale-[0.99]'
+                            : 'border-border/80 bg-background/40 hover:border-accent/60 hover:bg-background/80',
+                        )}
+                      >
+                        <UploadCloud className="size-6 text-accent group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-semibold text-foreground">
+                          Upload Structural Building Image
+                        </span>
+                        <span className="text-[10px] text-muted max-w-xs">
+                          3D model screenshot, SketchUp/Revit export, or massing photo (PNG, JPG, WebP)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="relative flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                        <img
+                          src={uploadedImage}
+                          alt="Structural Reference"
+                          className="size-16 rounded-lg object-cover border border-border shrink-0"
+                        />
+                        <div className="flex flex-1 flex-col justify-between overflow-hidden">
+                          <p className="text-xs font-semibold text-foreground truncate">
+                            Structural Architecture Locked
+                          </p>
+                          <span className="text-[11px] text-emerald-400 font-medium">
+                            1:1 geometry & silhouette retention
+                          </span>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => primaryFileInputRef.current?.click()}
+                              className="text-[11px] text-accent hover:underline font-medium"
+                            >
+                              Replace
+                            </button>
+                            <span className="text-muted text-[10px]">·</span>
+                            <button
+                              type="button"
+                              onClick={onUploadedImageClear}
+                              className="text-[11px] text-red-400 hover:underline font-medium"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Optional Location Reference Image */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span>Location Reference Image</span>
+                        <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-normal text-muted">
+                          Optional
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-normal text-muted">Guides climate & landscape</span>
                     </label>
 
                     <input
@@ -178,71 +286,96 @@ export function RenderingOptionsPanel({
                     {!locationImage ? (
                       <div
                         onClick={() => locationFileInputRef.current?.click()}
-                        className="group flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/80 bg-background/40 p-4 text-center cursor-pointer hover:border-accent/60 hover:bg-background/80 transition-all"
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setIsDraggingLocation(true)
+                        }}
+                        onDragLeave={() => setIsDraggingLocation(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setIsDraggingLocation(false)
+                          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                            onLocationImageSelect(e.dataTransfer.files[0])
+                          }
+                        }}
+                        className={cn(
+                          'group flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-6 text-center cursor-pointer transition-all',
+                          isDraggingLocation
+                            ? 'border-accent bg-accent/15 scale-[0.99]'
+                            : 'border-border/80 bg-background/40 hover:border-accent/60 hover:bg-background/80',
+                        )}
                       >
-                        <UploadCloud className="size-5 text-muted group-hover:text-accent transition-colors" />
+                        <UploadCloud className="size-6 text-muted group-hover:text-accent transition-colors" />
                         <span className="text-xs font-medium text-foreground">
-                          Upload Surrounding Site / Neighborhood Photo
+                          Upload Site / Neighborhood Photo
                         </span>
-                        <span className="text-[10px] text-muted">
-                          Informs trees, road finish, lighting & neighborhood style without altering building architecture
+                        <span className="text-[10px] text-muted max-w-xs">
+                          Informs environment, road texture & vegetation without altering building design
                         </span>
                       </div>
                     ) : (
-                      <div className="relative flex items-center gap-3 rounded-xl border border-border bg-background p-2.5">
+                      <div className="relative flex items-center gap-3 rounded-xl border border-border bg-background p-3">
                         <img
                           src={locationImage}
                           alt="Location Reference"
-                          className="size-14 rounded-lg object-cover border border-border shrink-0"
+                          className="size-16 rounded-lg object-cover border border-border shrink-0"
                         />
                         <div className="flex flex-1 flex-col justify-between overflow-hidden">
                           <p className="text-xs font-semibold text-foreground truncate">
-                            Environmental Reference Active
+                            Environmental Context Active
                           </p>
-                          <span className="text-[11px] text-emerald-400 font-medium">
-                            Guides trees, terrain & climate mood
+                          <span className="text-[11px] text-accent font-medium">
+                            Guides surrounding site & atmosphere
                           </span>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => locationFileInputRef.current?.click()}
+                              className="text-[11px] text-accent hover:underline font-medium"
+                            >
+                              Replace
+                            </button>
+                            <span className="text-muted text-[10px]">·</span>
+                            <button
+                              type="button"
+                              onClick={onLocationImageClear}
+                              className="text-[11px] text-red-400 hover:underline font-medium"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={onLocationImageClear}
-                          className="size-8 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                        >
-                          <X className="size-4" />
-                        </Button>
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Structural & Location Notes */}
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-semibold text-foreground">
-                        Structural Notes <span className="font-normal text-muted">(Massing, Facade, Roof)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={exteriorSettings.structuralNotes || ''}
-                        onChange={(e) => onUpdateExterior({ structuralNotes: e.target.value })}
-                        placeholder="e.g. 2-story massing, flat cantilevered roof, floor-to-ceiling glass, teak louvers"
-                        className="h-9 w-full rounded-xl border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-                      />
-                    </div>
+                {/* Structural Notes & Location Notes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Structural Notes <span className="font-normal text-muted">(Massing, Facade, Roof, Proportions)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={exteriorSettings.structuralNotes || ''}
+                      onChange={(e) => onUpdateExterior({ structuralNotes: e.target.value })}
+                      placeholder="e.g. 2-story massing, flat cantilevered roof, floor-to-ceiling glass, teak louvers"
+                      className="h-9 w-full rounded-xl border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
+                  </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-semibold text-foreground">
-                        Location Notes <span className="font-normal text-muted">(Landscape, Road, Climate)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={exteriorSettings.locationNotes || ''}
-                        onChange={(e) => onUpdateExterior({ locationNotes: e.target.value })}
-                        placeholder="e.g. Lush Kerala coconut palms, wet tar road with reflection, manicured tropical lawn"
-                        className="h-9 w-full rounded-xl border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-                      />
-                    </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Location Notes <span className="font-normal text-muted">(Landscape, Road, Climate, Vegetation)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={exteriorSettings.locationNotes || ''}
+                      onChange={(e) => onUpdateExterior({ locationNotes: e.target.value })}
+                      placeholder="e.g. Wet asphalt road with reflection, lush Kerala coconut palms, tropical lawn"
+                      className="h-9 w-full rounded-xl border border-border bg-background px-3 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>
@@ -814,7 +947,7 @@ export function RenderingOptionsPanel({
       {/* ============================================================== */}
       {mode === 'interior' && (
         <>
-          {/* Section 1: Room Type & SketchUp Outlines Removal */}
+          {/* Section 1: Room Reference Image & CAD Artifact Removal */}
           <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/50 backdrop-blur-sm transition-all">
             <button
               type="button"
@@ -827,14 +960,19 @@ export function RenderingOptionsPanel({
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold text-foreground">
-                    1. Room Type & SketchUp CAD Artifact Removal
+                    1. Room Reference Image & CAD Artifact Removal
                   </h4>
                   <p className="text-xs text-muted">
-                    Room classification and automatic cleanup of SketchUp wireframe black viewport outlines
+                    Upload room blockout or photo; cleanup raw SketchUp black viewport outlines
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-muted">
+                {uploadedImage && (
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                    Room Image Attached
+                  </span>
+                )}
                 <span className="text-xs font-medium text-accent">
                   {interiorSettings.roomType}
                 </span>
@@ -848,7 +986,85 @@ export function RenderingOptionsPanel({
 
             {!collapsedSections.interiorRoom && (
               <div className="border-t border-border/50 p-4 pt-3 flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Primary Interior Room Reference Image */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>Interior Room Reference Image</span>
+                      <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[9px] font-semibold text-accent uppercase">
+                        Primary
+                      </span>
+                    </span>
+                    <span className="text-[11px] font-normal text-muted">Preserves room geometry, walls, and ceiling height</span>
+                  </label>
+
+                  {!uploadedImage ? (
+                    <div
+                      onClick={() => primaryFileInputRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        setIsDraggingPrimary(true)
+                      }}
+                      onDragLeave={() => setIsDraggingPrimary(false)}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        setIsDraggingPrimary(false)
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          onUploadedImageSelect(e.dataTransfer.files[0])
+                        }
+                      }}
+                      className={cn(
+                        'group flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-center cursor-pointer transition-all',
+                        isDraggingPrimary
+                          ? 'border-accent bg-accent/15 scale-[0.99]'
+                          : 'border-border/80 bg-background/40 hover:border-accent/60 hover:bg-background/80',
+                      )}
+                    >
+                      <UploadCloud className="size-6 text-accent group-hover:scale-110 transition-transform" />
+                      <span className="text-xs font-semibold text-foreground">
+                        Upload Interior Room Viewport / Photo
+                      </span>
+                      <span className="text-[10px] text-muted max-w-sm">
+                        SketchUp room blockout, white clay model, or existing interior room photo (PNG, JPG, WebP)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="relative flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                      <img
+                        src={uploadedImage}
+                        alt="Interior Room Reference"
+                        className="size-16 rounded-lg object-cover border border-border shrink-0"
+                      />
+                      <div className="flex flex-1 flex-col justify-between overflow-hidden">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          Interior Room Reference Locked
+                        </p>
+                        <span className="text-[11px] text-emerald-400 font-medium">
+                          1:1 room geometry, wall boundaries & perspective locked
+                        </span>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => primaryFileInputRef.current?.click()}
+                            className="text-[11px] text-accent hover:underline font-medium"
+                          >
+                            Replace
+                          </button>
+                          <span className="text-muted text-[10px]">·</span>
+                          <button
+                            type="button"
+                            onClick={onUploadedImageClear}
+                            className="text-[11px] text-red-400 hover:underline font-medium"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-foreground">Interior Space Type</label>
                     <select
@@ -864,7 +1080,7 @@ export function RenderingOptionsPanel({
                     </select>
                   </div>
 
-                  <div className="flex items-center gap-3 pt-4 sm:pt-6">
+                  <div className="flex items-center gap-3 pt-3 sm:pt-5">
                     <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-foreground">
                       <input
                         type="checkbox"
