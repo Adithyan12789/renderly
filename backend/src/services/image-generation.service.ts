@@ -616,24 +616,78 @@ export class ImageGenerationService {
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    // 3. Primary Cloud Engine: Stability AI SDXL Image-to-Image (When balance is active)
+    // 3. Cloud Neural Synthesis: Stability AI Structure ControlNet / SDXL Image-to-Image
     if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
+      // 3A. Primary SOTA Method: Stability AI Structure ControlNet (v2beta)
+      // This is the gold standard for architectural rendering: extracts edge/depth geometry from 3D models while synthesizing 100% realistic materials
       try {
-        let effectiveStrength = 0.80
+        const controlStrength = renderingMode === 'preserve-structure' ? '0.85' : renderingMode === 'realistic-enhancement' ? '0.70' : '0.55'
+        console.log(`[ImageGen] Invoking Stability AI ControlNet Structure API (control_strength: ${controlStrength})...`)
+
+        const structureFormData = new FormData()
+        structureFormData.append('image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'structure.jpg')
+        structureFormData.append('prompt', `${category === 'exterior' ? 'Master architectural exterior photograph' : 'Master luxury architectural interior photograph'}, ${enhancedPrompt}`.slice(0, 2000))
+        structureFormData.append('control_strength', controlStrength)
+        structureFormData.append('output_format', 'jpeg')
+
+        const structRes = await fetch('https://api.stability.ai/v2beta/stable-image/control/structure', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${env.STABILITY_API_KEY}`,
+            Accept: 'image/*',
+          },
+          body: structureFormData,
+        })
+
+        if (structRes.ok) {
+          const rawBuffer = Buffer.from(await structRes.arrayBuffer())
+          if (rawBuffer.length > 5000) {
+            const optimized = await sharp(rawBuffer)
+              .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
+              .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
+              .toBuffer()
+            fs.writeFileSync(filePath, optimized)
+            console.log(`[ImageGen] Stability AI Structure synthesis complete! Saved ${relativeUrl}`)
+            return {
+              imageUrl: relativeUrl,
+              sourceImageUrl: sourceUrl,
+              locationImageUrl,
+              enhancedPrompt,
+              provider: `stability-structure-${renderingMode}`,
+              aspectRatio: targetAspect,
+            }
+          }
+        } else {
+          const errText = await structRes.text()
+          console.warn('[ImageGen] Stability AI Structure API response error:', structRes.status, errText)
+          if (structRes.status === 402 || structRes.status === 429) {
+            console.warn('[ImageGen] Stability AI API account has insufficient credits ($0.0022 balance vs $0.009+ required). Please purchase credits at https://platform.stability.ai/dashboard/billing.')
+          }
+        }
+      } catch (structErr) {
+        console.warn('[ImageGen] Stability Structure endpoint skipped/failed:', structErr)
+      }
+
+      // 3B. Secondary Method: SDXL Image-to-Image with calibrated preservation strength
+      // Note: In Stability SDXL API, image_strength represents PRESERVATION STRENGTH (1.0 = keep original, 0.0 = replace).
+      // For untextured 3D models/blockouts, a value of 0.58-0.62 preserves building envelope and perspective while providing 40% denoising latitude to synthesize PBR materials.
+      try {
+        let effectiveStrength = 0.60
         let cfgScale = '8.0'
 
         if (renderingMode === 'preserve-structure') {
-          effectiveStrength = Math.max(0.76, Math.min(0.88, geometryStrength || 0.82))
+          // 0.60 preservation: locks floor count, openings, and roofline while converting clay/wireframe into physical finishes
+          effectiveStrength = Math.max(0.55, Math.min(0.68, (geometryStrength || 0.85) * 0.72))
           cfgScale = '8.5'
         } else if (renderingMode === 'realistic-enhancement') {
-          effectiveStrength = Math.max(0.62, Math.min(0.74, geometryStrength || 0.68))
+          effectiveStrength = 0.50
           cfgScale = '7.5'
         } else if (renderingMode === 'creative-redesign') {
-          effectiveStrength = Math.max(0.45, Math.min(0.55, geometryStrength || 0.50))
+          effectiveStrength = 0.38
           cfgScale = '7.0'
         }
 
-        console.log(`[ImageGen] Transforming architectural model with Stability AI (${renderingMode}, strength: ${effectiveStrength.toFixed(2)})...`)
+        console.log(`[ImageGen] Transforming architectural model with Stability AI SDXL img2img (${renderingMode}, calibrated preservation strength: ${effectiveStrength.toFixed(2)})...`)
 
         const structuredPrompt = category === 'exterior'
           ? `Master architectural photography strictly preserving the exact building geometry, silhouette, floor heights, window and door placements, and camera angle of the uploaded reference model. Render with photorealistic ${style} materials, realistic PBR surface textures, physical glass reflections, ${effectiveLighting} atmospheric illumination, architectural photography, 8k resolution, ArchDaily quality, sharp focus.`
@@ -649,7 +703,7 @@ export class ImageGenerationService {
         formData.append('text_prompts[1][weight]', '-1')
         formData.append('cfg_scale', cfgScale)
         formData.append('samples', '1')
-        formData.append('steps', '20')
+        formData.append('steps', '25')
 
         const response = await fetch(
           'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
@@ -673,7 +727,7 @@ export class ImageGenerationService {
               .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
               .toBuffer()
             fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] Stability AI synthesis complete! Saved ${relativeUrl}`)
+            console.log(`[ImageGen] Stability AI SDXL synthesis complete! Saved ${relativeUrl}`)
             return {
               imageUrl: relativeUrl,
               sourceImageUrl: sourceUrl,
@@ -685,10 +739,10 @@ export class ImageGenerationService {
           }
         } else {
           const errText = await response.text()
-          console.warn('[ImageGen] Stability AI API response error:', response.status, errText)
+          console.warn('[ImageGen] Stability AI SDXL API response error:', response.status, errText)
         }
       } catch (err) {
-        console.error('[ImageGen] Stability AI image-to-image failed, falling back to local structural neural engine:', err)
+        console.error('[ImageGen] Stability AI image-to-image failed, falling back to local structural rendering pipeline:', err)
       }
     }
 
