@@ -17,8 +17,10 @@ import { RegisterPage } from '@/pages/auth/register-page'
 import { LandingPage } from '@/pages/landing-page'
 import { LegalPage } from '@/pages/legal-page'
 import { NotFoundPage } from '@/pages/not-found-page'
+import { AdminPage } from '@/pages/admin/admin-page'
 
 export const router = createBrowserRouter([
+  { path: 'admin', element: <AdminPage /> },
   {
     element: <MarketingLayout />,
     children: [
@@ -56,6 +58,7 @@ export const router = createBrowserRouter([
       { path: 'plans', element: <Navigate to="/app/subscription" replace /> },
       { path: 'pricing', element: <Navigate to="/app/subscription" replace /> },
       { path: 'settings', element: <SettingsPage /> },
+      { path: 'admin', element: <Navigate to="/admin" replace /> },
     ],
   },
   { path: '*', element: <NotFoundPage /> },

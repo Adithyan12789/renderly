@@ -24,7 +24,10 @@ export function createApp() {
 
         const isAllowed =
           env.clientOrigins.includes(origin) ||
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+          /^https:\/\/renderly-[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin) ||
+          origin === 'https://renderly-flame.vercel.app' ||
+          origin.endsWith('.vercel.app')
 
         if (isAllowed) {
           return callback(null, true)

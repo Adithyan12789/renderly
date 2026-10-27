@@ -1,21 +1,47 @@
 import axios, { isAxiosError } from 'axios'
 
-const rawBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+const defaultRemoteApi =
+  typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    ? 'https://renderly-bw57.onrender.com'
+    : 'http://localhost:4000'
+
+const rawBase = (
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    ? 'https://renderly-bw57.onrender.com'
+    : '')
+)
+  .trim()
+  .replace(/\/+$/, '')
+
 const baseURL = rawBase ? (rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`) : '/api'
 
 export const api = axios.create({
   baseURL,
   withCredentials: true,
-  timeout: 20_000,
+  timeout: 25_000,
   headers: { 'Content-Type': 'application/json' },
 })
 
 api.interceptors.request.use((config) => {
   try {
-    const token = localStorage.getItem('renderly_token') || localStorage.getItem('lucent_token')
-    if (token) {
+    const isAdminRoute = config.url?.includes('/admin')
+    if (isAdminRoute) {
       config.headers = config.headers || {}
-      config.headers.Authorization = `Bearer ${token}`
+      const adminCode = localStorage.getItem('renderly_admin_code') || sessionStorage.getItem('renderly_admin_code')
+      if (adminCode) {
+        config.headers['x-admin-code'] = adminCode
+      }
+      const adminToken = localStorage.getItem('renderly_admin_token')
+      if (adminToken) {
+        config.headers['x-admin-token'] = adminToken
+      }
+    } else {
+      const token = localStorage.getItem('renderly_token') || localStorage.getItem('lucent_token')
+      if (token) {
+        config.headers = config.headers || {}
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
   } catch {
     // Ignore storage issues
@@ -60,7 +86,7 @@ export function resolveImageUrl(url: string | null | undefined): string {
     return url
   }
   if (url.startsWith('/uploads/')) {
-    const apiOrigin = (import.meta.env.VITE_API_URL || 'http://localhost:4000')
+    const apiOrigin = (import.meta.env.VITE_API_URL || defaultRemoteApi)
       .replace(/\/api\/?$/, '')
       .replace(/\/+$/, '')
     return `${apiOrigin}${url}`
