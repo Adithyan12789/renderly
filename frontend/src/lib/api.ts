@@ -82,14 +82,15 @@ export function getErrorMessage(error: unknown): string {
 
 export function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
     return url
   }
-  if (url.startsWith('/uploads/')) {
+  const normalizedUrl = url.startsWith('/') ? url : `/${url}`
+  if (normalizedUrl.startsWith('/uploads/')) {
     const apiOrigin = (import.meta.env.VITE_API_URL || defaultRemoteApi)
       .replace(/\/api\/?$/, '')
       .replace(/\/+$/, '')
-    return `${apiOrigin}${url}`
+    return `${apiOrigin}${normalizedUrl}`
   }
   return url
 }

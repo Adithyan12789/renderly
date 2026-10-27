@@ -6,6 +6,7 @@ import { UsageMeter } from '@/components/app/usage-meter'
 import { buttonVariants } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SerifAccent } from '@/components/ui/section-heading'
+import { resolveImageUrl } from '@/lib/api'
 import { PLAN_LIMITS } from '@/lib/site-content'
 import { projectsService } from '@/services/projects'
 import { rendersService } from '@/services/renders'
@@ -153,15 +154,19 @@ export function DashboardPage() {
             {renders.slice(0, 3).map((render) => (
               <Link
                 key={render.id}
-                to="/app/renders"
+                to={`/app/renders/${render.id}`}
                 className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-lg"
               >
                 <div className="relative aspect-[16/9] overflow-hidden bg-surface-raised">
                   <img
-                    src={render.imageUrl}
+                    src={resolveImageUrl(render.imageUrl)}
                     alt={render.prompt}
                     className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
+                    onError={(e) => {
+                      // Fallback to sample architectural villa if local or remote asset is unavailable
+                      e.currentTarget.src = '/images/hero-villa.png'
+                    }}
                   />
                   <div className="absolute top-2.5 left-2.5">
                     <span className="rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md capitalize">

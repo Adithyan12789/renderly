@@ -2,6 +2,7 @@ import { Boxes, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { resolveImageUrl } from '@/lib/api'
 import { PROJECT_TYPES } from '@/lib/site-content'
 import type { Project } from '@/types'
 
@@ -23,7 +24,9 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
   const [isDeleting, setIsDeleting] = useState(false)
 
   const typeLabel = PROJECT_TYPES.find((type) => type.value === project.type)?.label ?? project.type
-  const displayThumbnail = project.thumbnailUrl || TYPE_FALLBACK_IMAGES[project.type]
+  const displayThumbnail = project.thumbnailUrl
+    ? resolveImageUrl(project.thumbnailUrl)
+    : TYPE_FALLBACK_IMAGES[project.type] || '/images/hero-villa.png'
 
   async function handleDeleteConfirm() {
     if (!onDelete) return
@@ -46,6 +49,9 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
               alt={project.name}
               className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
+              onError={(e) => {
+                e.currentTarget.src = TYPE_FALLBACK_IMAGES[project.type] || '/images/hero-villa.png'
+              }}
             />
           ) : (
             <div className="grid size-full place-items-center text-muted">
