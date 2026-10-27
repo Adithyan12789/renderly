@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Box,
   ChevronRight,
   Download,
   Edit3,
@@ -32,6 +33,7 @@ import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { ImageMagnifier } from '@/components/app/image-magnifier'
 import { RelightModal } from '@/components/app/relight-modal'
 import { RenderEditModal } from '@/components/app/render-edit-modal'
+import { Spatial3dRenderModal } from '@/components/app/spatial-3d-render-modal'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { resolveImageUrl } from '@/lib/api'
@@ -86,6 +88,7 @@ export function RenderStudioPage() {
   const [isEnhanceOpen, setIsEnhanceOpen] = useState(false)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [isHdDownloadOpen, setIsHdDownloadOpen] = useState(false)
+  const [is3DModalOpen, setIs3DModalOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -541,6 +544,16 @@ export function RenderStudioPage() {
               <Film className="size-3.5 text-purple-400" />
               <span>Cinematic Flythrough</span>
             </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIs3DModalOpen(true)}
+              className="gap-1.5 shadow-sm hover:border-cyan-400/50 hover:bg-cyan-400/10 border-white/15 text-white/90"
+            >
+              <Box className="size-3.5 text-cyan-400" />
+              <span>3D Viewing</span>
+            </Button>
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -843,6 +856,15 @@ export function RenderStudioPage() {
         onClose={() => setIsHdDownloadOpen(false)}
         render={activeRender}
       />
+
+      {/* Spatial 3D Render Modal */}
+      {is3DModalOpen && activeRender && (
+        <Spatial3dRenderModal
+          render={activeRender}
+          isOpen={is3DModalOpen}
+          onClose={() => setIs3DModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

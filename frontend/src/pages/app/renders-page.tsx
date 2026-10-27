@@ -1,4 +1,5 @@
 import {
+  Box,
   Check,
   Download,
   Folder,
@@ -24,6 +25,7 @@ import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { PageHeader } from '@/components/app/page-header'
 import { RelightModal } from '@/components/app/relight-modal'
 import { RenderEditModal } from '@/components/app/render-edit-modal'
+import { Spatial3dRenderModal } from '@/components/app/spatial-3d-render-modal'
 import { Vibe3dSceneToolbar } from '@/components/app/vibe3d-scene-toolbar'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -115,8 +117,24 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const [activeCloseupsRender, setActiveCloseupsRender] = useState<Render | null>(null)
   const [activeEnhanceRender, setActiveEnhanceRender] = useState<Render | null>(null)
   const [downloadModalRender, setDownloadModalRender] = useState<Render | null>(null)
+  const [active3DModalRender, setActive3DModalRender] = useState<Render | null>(null)
   const [renderToDelete, setRenderToDelete] = useState<Render | null>(null)
   const [isDeleting, setIsDeleting] = useState<boolean>(false)
+
+  // Pickup captured 3D viewport angle from 3D Studio if redirected
+  useEffect(() => {
+    try {
+      const captured3d = sessionStorage.getItem('renderly_captured_3d_viewport')
+      const capturedName = sessionStorage.getItem('renderly_captured_model_name')
+      if (captured3d) {
+        setUploadedImage(captured3d)
+        setUploadedImageName(capturedName ? `3D Capture (${capturedName})` : '3D Viewport Angle')
+        sessionStorage.removeItem('renderly_captured_3d_viewport')
+        sessionStorage.removeItem('renderly_captured_model_name')
+        toast.success('3D Viewport angle loaded! Ready to synthesize render.')
+      }
+    } catch {}
+  }, [])
 
   // Load initial renders & projects
   useEffect(() => {
@@ -1005,6 +1023,14 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => setActive3DModalRender(render)}
+                          title="View in Interactive 3D Spatial Mesh"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400"
+                        >
+                          <Box className="size-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setDownloadModalRender(render)}
                           title="Download HD render (4K / 2K / 1080p)"
                           className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-accent hover:bg-accent/10 hover:text-accent"
@@ -1167,6 +1193,10 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                       setActiveFlythroughRender(activeLightboxRender)
                       setActiveLightboxRender(null)
                     }}
+                    onOpen3DView={() => {
+                      setActive3DModalRender(activeLightboxRender)
+                      setActiveLightboxRender(null)
+                    }}
                   />
 
                   <div className="flex items-center gap-2 ml-auto">
@@ -1285,6 +1315,17 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
         onClose={() => setDownloadModalRender(null)}
         render={downloadModalRender}
       />
+
+      {/* 3D Spatial Depth Mesh Viewer Modal */}
+      {active3DModalRender && (
+        <Spatial3dRenderModal
+          isOpen={Boolean(active3DModalRender)}
+          onClose={() => setActive3DModalRender(null)}
+          imageUrl={active3DModalRender.imageUrl}
+          title={active3DModalRender.prompt?.split('·')[0]?.trim() || 'Architectural 3D Scene'}
+          prompt={active3DModalRender.prompt}
+        />
+      )}
     </div>
   )
 }

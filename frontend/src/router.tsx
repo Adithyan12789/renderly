@@ -18,6 +18,7 @@ import { LandingPage } from '@/pages/landing-page'
 import { LegalPage } from '@/pages/legal-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { AdminPage } from '@/pages/admin/admin-page'
+import { ThreeDStudioPage } from '@/pages/app/three-d-studio-page'
 
 export const router = createBrowserRouter([
   { path: 'admin', element: <AdminPage /> },
@@ -54,6 +55,8 @@ export const router = createBrowserRouter([
       { path: 'editor/:id', element: <RenderStudioPage /> },
       { path: 'walkthroughs', element: <WalkthroughsPage /> },
       { path: 'walkthrough', element: <Navigate to="/app/walkthroughs" replace /> },
+      { path: '3d', element: <ThreeDStudioPage /> },
+      { path: '3d-viewer', element: <Navigate to="/app/3d" replace /> },
       { path: 'subscription', element: <SubscriptionPage /> },
       { path: 'plans', element: <Navigate to="/app/subscription" replace /> },
       { path: 'pricing', element: <Navigate to="/app/subscription" replace /> },

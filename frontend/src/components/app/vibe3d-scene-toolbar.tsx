@@ -1,4 +1,5 @@
 import {
+  Box,
   Download,
   Film,
   Focus,
@@ -19,6 +20,7 @@ export interface Vibe3dSceneToolbarProps {
   onOpenCloseups?: () => void
   onOpenFlythrough?: () => void
   onOpenCompare?: () => void
+  onOpen3DView?: () => void
   onDownload?: () => void
   variant?: 'compact' | 'studio'
   className?: string
@@ -32,6 +34,7 @@ export function Vibe3dSceneToolbar({
   onOpenCloseups,
   onOpenFlythrough,
   onOpenCompare,
+  onOpen3DView,
   onDownload,
   variant = 'compact',
   className,
@@ -141,6 +144,20 @@ export function Vibe3dSceneToolbar({
           </button>
         )}
 
+        {onOpen3DView && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen3DView()
+            }}
+            title="Interactive 3D Spatial View"
+            className="grid size-7 place-items-center rounded-lg hover:bg-white/20 hover:text-emerald-400 transition-colors"
+          >
+            <Box className="size-3.5" />
+          </button>
+        )}
+
         <button
           type="button"
           onClick={(e) => {
@@ -228,6 +245,17 @@ export function Vibe3dSceneToolbar({
           >
             <SlidersHorizontal className="size-3.5 text-sky-400" />
             <span>Compare</span>
+          </button>
+        )}
+
+        {onOpen3DView && (
+          <button
+            type="button"
+            onClick={onOpen3DView}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+          >
+            <Box className="size-3.5 text-emerald-400" />
+            <span>View in 3D</span>
           </button>
         )}
       </div>

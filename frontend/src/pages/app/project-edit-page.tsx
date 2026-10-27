@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Box,
   Boxes,
   ChevronRight,
   Download,
@@ -19,6 +20,7 @@ import { CloseupsModal } from '@/components/app/closeups-modal'
 import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { RelightModal } from '@/components/app/relight-modal'
 import { RenderEditModal } from '@/components/app/render-edit-modal'
+import { Spatial3dRenderModal } from '@/components/app/spatial-3d-render-modal'
 import { Vibe3dSceneToolbar } from '@/components/app/vibe3d-scene-toolbar'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -55,6 +57,7 @@ export function ProjectEditPage() {
   const [activeRelightRender, setActiveRelightRender] = useState<Render | null>(null)
   const [activeCloseupsRender, setActiveCloseupsRender] = useState<Render | null>(null)
   const [activeEnhanceRender, setActiveEnhanceRender] = useState<Render | null>(null)
+  const [active3DModalRender, setActive3DModalRender] = useState<Render | null>(null)
   const [renderToDelete, setRenderToDelete] = useState<Render | null>(null)
   const [isDeletingRender, setIsDeletingRender] = useState(false)
 
@@ -407,6 +410,14 @@ export function ProjectEditPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => setActive3DModalRender(render)}
+                          title="View 3D Spatial Mesh"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10 hover:text-cyan-400"
+                        >
+                          <Box className="size-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             const link = document.createElement('a')
                             link.href = resolveImageUrl(render.imageUrl)
@@ -524,6 +535,10 @@ export function ProjectEditPage() {
                     setActiveFlythroughRender(activeLightboxRender)
                     setActiveLightboxRender(null)
                   }}
+                  onOpen3DView={() => {
+                    setActive3DModalRender(activeLightboxRender)
+                    setActiveLightboxRender(null)
+                  }}
                 />
 
                 <div className="flex items-center gap-2 ml-auto">
@@ -600,6 +615,15 @@ export function ProjectEditPage() {
           isOpen={Boolean(activeEnhanceRender)}
           onClose={() => setActiveEnhanceRender(null)}
           onEnhanceSuccess={handleAddNewVersion}
+        />
+      )}
+
+      {/* Spatial 3D Render Modal */}
+      {active3DModalRender && (
+        <Spatial3dRenderModal
+          render={active3DModalRender}
+          isOpen={Boolean(active3DModalRender)}
+          onClose={() => setActive3DModalRender(null)}
         />
       )}
 
