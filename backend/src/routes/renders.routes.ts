@@ -11,13 +11,16 @@ import { ImageGenerationService } from '../services/image-generation.service.js'
 import { HttpError } from '../utils/http-error.js'
 import { sendSuccess } from '../utils/respond.js'
 
+import { validateRenderingSettings } from '../utils/prompt-builder.js'
+
 export const rendersRouter = Router()
 
 const generateRenderSchema = z
   .object({
     image: z.string().trim().optional(),
-    prompt: z.string().trim().max(1000).optional(),
-    refinementPrompt: z.string().trim().max(1000).optional(),
+    locationImage: z.string().trim().optional(),
+    prompt: z.string().trim().max(4000).optional(),
+    refinementPrompt: z.string().trim().max(4000).optional(),
     style: z
       .enum([
         'modern-luxury',
@@ -41,6 +44,8 @@ const generateRenderSchema = z
     projectId: z.string().trim().optional().nullable(),
     setAsThumbnail: z.boolean().default(false),
     category: z.enum(['exterior', 'interior']).default('exterior'),
+    exteriorSettings: z.record(z.string(), z.unknown()).optional(),
+    interiorSettings: z.record(z.string(), z.unknown()).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .refine((data) => Boolean(data.image || data.prompt), {
@@ -258,6 +263,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
     let genResult: {
       imageUrl: string
       sourceImageUrl?: string | null
+      locationImageUrl?: string | null
       enhancedPrompt: string
       provider: string
       aspectRatio?: RenderAspectRatio
@@ -266,9 +272,17 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
     let finalPrompt = payload.prompt?.trim() || ''
 
     if (payload.image) {
+      // Validate configuration options
+      const settingsToValidate = payload.category === 'exterior' ? payload.exteriorSettings : payload.interiorSettings
+      const validation = validateRenderingSettings(payload.category, settingsToValidate)
+      if (!validation.valid) {
+        throw new HttpError(400, validation.errors.join('; '), 'INVALID_RENDERING_SETTINGS')
+      }
+
       // 1. Vibe3D Image-to-Photorealistic Render Pipeline
       genResult = await ImageGenerationService.generateRenderFromImage({
         image: payload.image,
+        locationImage: payload.locationImage,
         style: payload.style,
         engine: payload.engine,
         lighting: payload.lighting,
@@ -278,15 +292,23 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
         refinementPrompt: payload.refinementPrompt || payload.prompt,
         aspectRatio: payload.aspectRatio,
         category: payload.category,
+        exteriorSettings: payload.exteriorSettings as any,
+        interiorSettings: payload.interiorSettings as any,
       })
 
       if (!finalPrompt) {
-        const styleName = payload.style.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-        const lightingName = payload.lighting.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-        const engineName = payload.engine.replace(/\b\w/g, (c) => c.toUpperCase())
-        const modeLabel = payload.renderingMode === 'preserve-structure' ? 'Preserve Structure' : payload.renderingMode === 'realistic-enhancement' ? 'Realistic Enhancement' : 'Creative Redesign'
-        const categoryLabel = payload.category === 'interior' ? 'Interior' : 'Exterior'
-        finalPrompt = `${engineName} ${styleName} ${categoryLabel} · ${lightingName} (${modeLabel})`
+        if (payload.category === 'exterior' && payload.exteriorSettings?.buildingType) {
+          finalPrompt = `${payload.exteriorSettings.buildingType} · ${payload.exteriorSettings.architecturalStyle || 'Modern'} · ${payload.exteriorSettings.timeOfDay || payload.lighting}`
+        } else if (payload.category === 'interior' && payload.interiorSettings?.roomType) {
+          finalPrompt = `${payload.interiorSettings.roomType} · ${payload.interiorSettings.lightingMood || payload.lighting}`
+        } else {
+          const styleName = payload.style.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+          const lightingName = payload.lighting.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+          const engineName = payload.engine.replace(/\b\w/g, (c) => c.toUpperCase())
+          const modeLabel = payload.renderingMode === 'preserve-structure' ? 'Preserve Structure' : payload.renderingMode === 'realistic-enhancement' ? 'Realistic Enhancement' : 'Creative Redesign'
+          const categoryLabel = payload.category === 'interior' ? 'Interior' : 'Exterior'
+          finalPrompt = `${engineName} ${styleName} ${categoryLabel} · ${lightingName} (${modeLabel})`
+        }
       }
     } else {
       // 2. Legacy prompt-only generation
@@ -304,6 +326,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       prompt: finalPrompt,
       enhancedPrompt: genResult.enhancedPrompt,
       sourceImageUrl: genResult.sourceImageUrl || null,
+      locationImageUrl: genResult.locationImageUrl || null,
       style: payload.style,
       engine: payload.engine,
       lighting: payload.lighting,
@@ -317,6 +340,8 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       metadata: {
         ...(payload.metadata || {}),
         category: payload.category || 'exterior',
+        ...(payload.exteriorSettings ? { exteriorSettings: payload.exteriorSettings } : {}),
+        ...(payload.interiorSettings ? { interiorSettings: payload.interiorSettings } : {}),
       },
     })
 

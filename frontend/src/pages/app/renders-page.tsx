@@ -14,7 +14,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BeforeAfterSlider } from '@/components/app/before-after-slider'
 import { CinematicFlythroughModal } from '@/components/app/cinematic-flythrough-modal'
@@ -25,12 +25,14 @@ import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { PageHeader } from '@/components/app/page-header'
 import { RelightModal } from '@/components/app/relight-modal'
 import { RenderEditModal } from '@/components/app/render-edit-modal'
+import { RenderingOptionsPanel } from '@/components/app/rendering-options-panel'
 import { Spatial3dRenderModal } from '@/components/app/spatial-3d-render-modal'
 import { Vibe3dSceneToolbar } from '@/components/app/vibe3d-scene-toolbar'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getErrorMessage, resolveImageUrl } from '@/lib/api'
+import { buildExteriorPrompt, buildInteriorPrompt } from '@/lib/prompt-builder'
 import {
   ARCHITECTURAL_STYLES,
   EXTERIOR_ENVIRONMENT_PRESETS,
@@ -49,6 +51,8 @@ import { projectsService } from '@/services/projects'
 import { rendersService } from '@/services/renders'
 import { toast } from '@/stores/toast-store'
 import type {
+  ExteriorRenderingSettings,
+  InteriorRenderingSettings,
   Project,
   Render,
   RenderAspectRatio,
@@ -147,6 +151,78 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false)
   const [setAsThumbnail, setSetAsThumbnail] = useState<boolean>(false)
+
+  // Exterior & Interior Configuration Settings (from exterior.txt & interior.txt)
+  const [exteriorSettings, setExteriorSettings] = useState<ExteriorRenderingSettings>({
+    buildingType: 'Modern Villa',
+    architecturalStyle: 'Tropical Modern',
+    promptStyle: 'Detailed',
+    countryRegion: 'India – Kerala',
+    areaCommunity: '',
+    districtPlace: '',
+    timeOfDay: 'Golden Hour',
+    primaryMood: 'Ultra Photorealistic',
+    cinematicSchool: 'None',
+    season: 'All Season / Dry',
+    weather: 'Clear Sky',
+    humanPresence: 'None',
+    vehicles: 'None',
+    boundaryWall: 'Auto',
+    cameraBody: 'Hasselblad X2D 100C',
+    cameraLens: '35mm Wide',
+    cameraAngle: 'Eye Level',
+    storyboardShots: ['SHOT 01 — HERO FRONT WIDE'],
+    structuralNotes: '',
+    locationNotes: '',
+    specialInstructions:
+      'Keep architecture 100% locked. Do not change geometry, materials, roofline, openings, facade design, road, footpath, or landscape position.',
+  })
+
+  const [interiorSettings, setInteriorSettings] = useState<InteriorRenderingSettings>({
+    roomType: 'Living Room & Salon',
+    flooringMaterial: 'Original Model Flooring',
+    wallMaterial: 'Original Model Wall Finishes',
+    accentMaterial: 'Brushed Warm Brass / Bronze',
+    lightingMood: 'Soft Natural Daylight',
+    cameraHeight: 'Eye Level (approx 1.5m / 5ft)',
+    perspectiveType: 'Preserve Original Viewpoint',
+    removeSketchupOutlines: true,
+    specialInstructions:
+      'Preserve room geometry, wall boundaries, ceiling height, and window/door openings 100% locked. Enhance materials and lighting with physically plausible realism.',
+  })
+
+  // Optional secondary Location Image
+  const [locationImage, setLocationImage] = useState<string | null>(null)
+
+  function handleLocationImageSelect(file: File) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file (PNG, JPG, WebP).')
+      return
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Image size exceeds 20MB limit.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      setLocationImage(result)
+      toast.success(`Location image (${file.name}) attached!`, 'Environmental Guidance Active')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function handleLocationImageClear() {
+    setLocationImage(null)
+  }
+
+  // Real-time live architectural prompt synthesis
+  const livePrompt = useMemo(() => {
+    if (mode === 'interior') {
+      return buildInteriorPrompt(interiorSettings, refinementPrompt)
+    }
+    return buildExteriorPrompt(exteriorSettings, refinementPrompt)
+  }, [mode, interiorSettings, exteriorSettings, refinementPrompt])
 
   function handleSelectRenderingMode(m: RenderingMode) {
     setSelectedRenderingMode(m)
@@ -327,6 +403,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
 
       const newRender = await rendersService.generate({
         image: uploadedImage,
+        locationImage: locationImage || undefined,
         style: selectedStyle,
         engine: selectedEngine,
         lighting: selectedLighting,
@@ -338,6 +415,8 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
         projectId: selectedProjectId || null,
         setAsThumbnail,
         category: mode,
+        exteriorSettings: mode === 'exterior' ? exteriorSettings : undefined,
+        interiorSettings: mode === 'interior' ? interiorSettings : undefined,
       })
 
       clearTimeout(t1)
@@ -893,6 +972,39 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Detailed Architectural Configurations (exterior.txt / interior.txt) */}
+          <div className="flex flex-col gap-3 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold tracking-wide text-foreground flex items-center gap-2">
+                <span>
+                  {mode === 'exterior'
+                    ? 'Architectural & Storyboard Configurations'
+                    : 'Interior Realism & Room Configurations'}
+                </span>
+                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
+                  {mode === 'exterior' ? 'exterior.txt' : 'interior.txt'}
+                </span>
+              </label>
+              <span className="text-xs text-muted">
+                {mode === 'exterior'
+                  ? 'Collapsible options for building massing, location, weather, optics & storyboard angles'
+                  : 'Collapsible options for room geometry, PBR finishes, bounce lighting & CAD line cleanup'}
+              </span>
+            </div>
+
+            <RenderingOptionsPanel
+              mode={mode}
+              exteriorSettings={exteriorSettings}
+              onUpdateExterior={(settings) => setExteriorSettings((prev) => ({ ...prev, ...settings }))}
+              interiorSettings={interiorSettings}
+              onUpdateInterior={(settings) => setInteriorSettings((prev) => ({ ...prev, ...settings }))}
+              locationImage={locationImage}
+              onLocationImageSelect={handleLocationImageSelect}
+              onLocationImageClear={handleLocationImageClear}
+              livePrompt={livePrompt}
+            />
           </div>
 
           {/* 7. Optional Material & Detail Notes */}

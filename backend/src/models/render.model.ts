@@ -35,6 +35,7 @@ export interface IRender extends Document {
   prompt: string
   enhancedPrompt: string
   sourceImageUrl?: string | null
+  locationImageUrl?: string | null
   style: RenderStyle
   engine: RenderEngine
   lighting: RenderLighting
@@ -58,6 +59,7 @@ export interface IRender extends Document {
     prompt: string
     enhancedPrompt: string
     sourceImageUrl: string | null
+    locationImageUrl: string | null
     style: RenderStyle
     engine: RenderEngine
     lighting: RenderLighting
@@ -86,9 +88,10 @@ const renderSchema = new Schema<IRender>(
       index: true,
     },
     versionLabel: { type: String, default: null },
-    prompt: { type: String, required: true, trim: true, maxlength: 1000 },
+    prompt: { type: String, required: true, trim: true, maxlength: 4000 },
     enhancedPrompt: { type: String, required: true, trim: true },
     sourceImageUrl: { type: String, default: null },
+    locationImageUrl: { type: String, default: null },
     style: {
       type: String,
       enum: ['modern-luxury', 'scandinavian', 'tropical', 'minimal', 'japanese', 'industrial', 'warm-cozy', 'futuristic'],
@@ -139,6 +142,7 @@ renderSchema.methods.toRenderJSON = function () {
     prompt: this.prompt,
     enhancedPrompt: this.enhancedPrompt,
     sourceImageUrl: this.sourceImageUrl || null,
+    locationImageUrl: this.locationImageUrl || null,
     style: this.style,
     engine: this.engine || 'hyperreal',
     lighting: this.lighting || 'golden-hour',

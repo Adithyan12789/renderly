@@ -19,3 +19,11 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Uploads
+uploads/renders/*.jpg
+uploads/renders/*.png
+uploads/sources/*
+!uploads/renders/.gitkeep
+!uploads/sources/.gitkeep
+

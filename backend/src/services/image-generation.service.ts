@@ -4,6 +4,13 @@ import path from 'node:path'
 import sharp from 'sharp'
 import { env } from '../config/env.js'
 import type { RenderAspectRatio, RenderEngine, RenderLighting, RenderStyle } from '../models/render.model.js'
+import {
+  buildExteriorPrompt,
+  buildInteriorPrompt,
+  buildNegativePrompt,
+  type ExteriorSettings,
+  type InteriorSettings,
+} from '../utils/prompt-builder.js'
 
 const STYLE_ENHANCERS: Record<RenderStyle, string> = {
   'modern-luxury':
@@ -103,6 +110,7 @@ export type RenderingMode = 'preserve-structure' | 'realistic-enhancement' | 'cr
 
 export interface GenerateImageFromModelOptions {
   image: string
+  locationImage?: string
   style: RenderStyle
   engine?: RenderEngine
   lighting?: RenderLighting
@@ -112,6 +120,8 @@ export interface GenerateImageFromModelOptions {
   refinementPrompt?: string
   aspectRatio?: RenderAspectRatio
   category?: 'exterior' | 'interior'
+  exteriorSettings?: ExteriorSettings
+  interiorSettings?: InteriorSettings
 }
 
 export interface GenerateImageOptions {
@@ -123,6 +133,7 @@ export interface GenerateImageOptions {
 export interface GenerateImageResult {
   imageUrl: string
   sourceImageUrl?: string | null
+  locationImageUrl?: string | null
   enhancedPrompt: string
   provider: string
   aspectRatio?: RenderAspectRatio
@@ -544,12 +555,33 @@ export class ImageGenerationService {
 
     const { rendersDir } = this.ensureDirs()
 
-    // 1. Resolve source image and detect aspect ratio
+    // 1. Resolve source image and optional location image
     const { buffer: rawSourceBuffer, sourceUrl, detectedAspect, width: origWidth, height: origHeight } =
       await this.resolveSourceImage(image)
     const targetAspect: RenderAspectRatio = options.aspectRatio || detectedAspect
     const { width: targetWidth, height: targetHeight } =
       STABILITY_DIMENSIONS[targetAspect] || STABILITY_DIMENSIONS['16:9']
+
+    let locationImageUrl: string | null = null
+    if (options.locationImage) {
+      try {
+        const locRes = await this.resolveSourceImage(options.locationImage)
+        locationImageUrl = locRes.sourceUrl || null
+      } catch (err) {
+        console.warn('[ImageGen] Could not resolve secondary location reference image:', err)
+      }
+    }
+
+    // Map lighting from exteriorSettings.timeOfDay if specified
+    let effectiveLighting = lighting
+    if (category === 'exterior' && options.exteriorSettings?.timeOfDay) {
+      const tod = options.exteriorSettings.timeOfDay.toLowerCase()
+      if (tod.includes('dusk') || tod.includes('blue hour')) effectiveLighting = 'dusk'
+      else if (tod.includes('night')) effectiveLighting = 'night'
+      else if (tod.includes('sunset') || tod.includes('golden hour')) effectiveLighting = 'golden-hour'
+      else if (tod.includes('overcast')) effectiveLighting = 'overcast'
+      else if (tod.includes('midday') || tod.includes('dawn')) effectiveLighting = 'daylight'
+    }
 
     // 2. Prepare high-quality resized buffer maintaining crisp resolution
     const preparedInitBuffer = await sharp(rawSourceBuffer)
@@ -557,14 +589,28 @@ export class ImageGenerationService {
       .jpeg({ quality: 95 })
       .toBuffer()
 
-    const enhancedPrompt = this.buildRealismPrompt({
-      style,
-      engine,
-      lighting,
-      environment,
-      refinementPrompt,
-      category,
-    })
+    let enhancedPrompt = ''
+    let negativeConstraints = ''
+
+    if (category === 'exterior' && options.exteriorSettings) {
+      enhancedPrompt = buildExteriorPrompt(options.exteriorSettings, refinementPrompt)
+      negativeConstraints = buildNegativePrompt('exterior', options.exteriorSettings)
+    } else if (category === 'interior' && options.interiorSettings) {
+      enhancedPrompt = buildInteriorPrompt(options.interiorSettings, refinementPrompt)
+      negativeConstraints = buildNegativePrompt('interior', options.interiorSettings)
+    } else {
+      enhancedPrompt = this.buildRealismPrompt({
+        style,
+        engine,
+        lighting: effectiveLighting,
+        environment,
+        refinementPrompt,
+        category,
+      })
+      negativeConstraints = category === 'exterior'
+        ? 'altering building geometry, changing window locations, changing roofline, adding or removing floors, moving doors, deformed structure, distorted walls, crooked lines, wireframe, clay render, sketch lines, cartoon, low resolution, blurry, watermark, bad architecture'
+        : 'altering room layout, moving walls, moving windows, changing doors, warped ceiling, distorted perspective, extra furniture in pathways, blurry, cartoon, wireframe, clay render, low quality, noise'
+    }
 
     const fileName = `render-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
@@ -589,13 +635,9 @@ export class ImageGenerationService {
 
         console.log(`[ImageGen] Transforming architectural model with Stability AI (${renderingMode}, strength: ${effectiveStrength.toFixed(2)})...`)
 
-        const negativeConstraints = category === 'exterior'
-          ? 'altering building geometry, changing window locations, changing roofline, adding or removing floors, moving doors, deformed structure, distorted walls, crooked lines, wireframe, clay render, sketch lines, cartoon, low resolution, blurry, watermark, bad architecture'
-          : 'altering room layout, moving walls, moving windows, changing doors, warped ceiling, distorted perspective, extra furniture in pathways, blurry, cartoon, wireframe, clay render, low quality, noise'
-
         const structuredPrompt = category === 'exterior'
-          ? `Master architectural photography strictly preserving the exact building geometry, silhouette, floor heights, window and door placements, and camera angle of the uploaded reference model. Render with photorealistic ${style} materials, realistic PBR surface textures, physical glass reflections, ${lighting} atmospheric illumination, architectural photography, 8k resolution, ArchDaily quality, sharp focus.`
-          : `Master architectural interior photography strictly preserving the exact room layout, wall boundaries, window and door openings, ceiling height, and camera perspective of the uploaded reference image. Render with luxurious ${style} finishes, realistic floor materials, natural indoor global illumination, ${lighting} lighting mood, architectural interior photography, 8k resolution, sharp focus.`
+          ? `Master architectural photography strictly preserving the exact building geometry, silhouette, floor heights, window and door placements, and camera angle of the uploaded reference model. Render with photorealistic ${style} materials, realistic PBR surface textures, physical glass reflections, ${effectiveLighting} atmospheric illumination, architectural photography, 8k resolution, ArchDaily quality, sharp focus.`
+          : `Master architectural interior photography strictly preserving the exact room layout, wall boundaries, window and door openings, ceiling height, and camera perspective of the uploaded reference image. Render with luxurious ${style} finishes, realistic floor materials, natural indoor global illumination, ${effectiveLighting} lighting mood, architectural interior photography, 8k resolution, sharp focus.`
 
         const formData = new FormData()
         formData.append('init_image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'init.jpg')
@@ -635,6 +677,7 @@ export class ImageGenerationService {
             return {
               imageUrl: relativeUrl,
               sourceImageUrl: sourceUrl,
+              locationImageUrl,
               enhancedPrompt,
               provider: `stability-sdxl-${renderingMode}`,
               aspectRatio: targetAspect,
@@ -651,7 +694,7 @@ export class ImageGenerationService {
 
     // 4. Vibe3D Structural Architecture Neural Engine (Guarantees 100% Geometric Match & Zero Hallucinations)
     try {
-      console.log(`[ImageGen] Synthesizing structural architectural render (${category}, ${renderingMode}, ${style}, ${lighting})...`)
+      console.log(`[ImageGen] Synthesizing structural architectural render (${category}, ${renderingMode}, ${style}, ${effectiveLighting})...`)
 
       const { data, info } = await sharp(preparedInitBuffer).raw().toBuffer({ resolveWithObject: true })
       const width = info.width
@@ -662,7 +705,7 @@ export class ImageGenerationService {
 
       if (category === 'exterior' && hasExternalBackground) {
         // A. Generate Atmospheric Sky & Ground Shadow Plates
-        const skyImage = await this.generateAtmospherePlate(width, height, lighting)
+        const skyImage = await this.generateAtmospherePlate(width, height, effectiveLighting)
         const shadowImage = await this.generateGroundShadow(width, height)
 
         // B. Process building materials, lighting, and textures
@@ -698,11 +741,11 @@ export class ImageGenerationService {
               b = Math.min(255, Math.round(b * 0.94 - 4))
             } else if (brightness > 200) {
               // Architectural concrete / limestone / white masonry sun radiance
-              if (lighting === 'golden-hour') {
+              if (effectiveLighting === 'golden-hour') {
                 r = Math.min(255, Math.round(r * 1.04 + 6))
                 g = Math.min(255, Math.round(g * 1.01 + 2))
                 b = Math.max(0, Math.round(b * 0.96 - 4))
-              } else if (lighting === 'dusk' || lighting === 'night') {
+              } else if (effectiveLighting === 'dusk' || effectiveLighting === 'night') {
                 r = Math.max(0, Math.round(r * 0.90 - 4))
                 g = Math.max(0, Math.round(g * 0.92 - 2))
                 b = Math.min(255, Math.round(b * 0.98 + 4))
@@ -736,15 +779,15 @@ export class ImageGenerationService {
         // Preserves 100% of the room walls, windows, doors, ceiling, and existing furniture!
         let modulated = sharp(preparedInitBuffer)
 
-        if (lighting === 'golden-hour') {
+        if (effectiveLighting === 'golden-hour') {
           modulated = modulated.modulate({ brightness: 1.04, saturation: 1.22, hue: -3 })
-        } else if (lighting === 'daylight') {
+        } else if (effectiveLighting === 'daylight') {
           modulated = modulated.modulate({ brightness: 1.06, saturation: 1.08 })
-        } else if (lighting === 'dusk') {
+        } else if (effectiveLighting === 'dusk') {
           modulated = modulated.modulate({ brightness: 0.92, saturation: 1.15, hue: 10 })
-        } else if (lighting === 'overcast') {
+        } else if (effectiveLighting === 'overcast') {
           modulated = modulated.modulate({ brightness: 1.02, saturation: 0.95 })
-        } else if (lighting === 'night') {
+        } else if (effectiveLighting === 'night') {
           modulated = modulated.modulate({ brightness: 0.85, saturation: 1.20, hue: 14 })
         }
 
@@ -765,6 +808,7 @@ export class ImageGenerationService {
       return {
         imageUrl: relativeUrl,
         sourceImageUrl: sourceUrl,
+        locationImageUrl,
         enhancedPrompt,
         provider: `vibe3d-structural-${renderingMode}`,
         aspectRatio: targetAspect,
@@ -779,6 +823,7 @@ export class ImageGenerationService {
       return {
         imageUrl: relativeUrl,
         sourceImageUrl: sourceUrl,
+        locationImageUrl,
         enhancedPrompt,
         provider: 'renderly-source-preserved',
         aspectRatio: targetAspect,

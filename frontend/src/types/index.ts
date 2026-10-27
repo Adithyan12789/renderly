@@ -94,6 +94,43 @@ export type RenderVersionType =
 
 export type RenderCategory = 'exterior' | 'interior'
 
+export interface ExteriorRenderingSettings {
+  buildingType?: string
+  architecturalStyle?: string
+  promptStyle?: 'Concise' | 'Detailed' | 'Conceptual' | 'Cinematic'
+  countryRegion?: string
+  areaCommunity?: string
+  districtPlace?: string
+  timeOfDay?: string
+  primaryMood?: string
+  cinematicSchool?: string
+  season?: string
+  weather?: string
+  humanPresence?: string
+  vehicles?: string
+  boundaryWall?: string
+  cameraBody?: string
+  cameraLens?: string
+  cameraAngle?: string
+  storyboardShots?: string[]
+  structuralNotes?: string
+  locationNotes?: string
+  specialInstructions?: string
+}
+
+export interface InteriorRenderingSettings {
+  roomType?: string
+  structuralPreservation?: string
+  flooringMaterial?: string
+  wallMaterial?: string
+  accentMaterial?: string
+  lightingMood?: string
+  cameraHeight?: string
+  perspectiveType?: string
+  removeSketchupOutlines?: boolean
+  specialInstructions?: string
+}
+
 export interface Render {
   id: string
   userId: string
@@ -104,6 +141,7 @@ export interface Render {
   prompt: string
   enhancedPrompt: string
   sourceImageUrl: string | null
+  locationImageUrl?: string | null
   style: RenderStyle
   engine: RenderEngine
   lighting: RenderLighting
@@ -116,6 +154,8 @@ export interface Render {
   provider: string
   metadata?: {
     category?: RenderCategory
+    exteriorSettings?: ExteriorRenderingSettings
+    interiorSettings?: InteriorRenderingSettings
     [key: string]: unknown
   }
   createdAt: string
@@ -142,6 +182,7 @@ export interface CloseupTarget {
 
 export interface GenerateRenderPayload {
   image?: string
+  locationImage?: string
   prompt?: string
   refinementPrompt?: string
   style: RenderStyle
@@ -154,6 +195,8 @@ export interface GenerateRenderPayload {
   projectId?: string | null
   setAsThumbnail?: boolean
   category?: RenderCategory
+  exteriorSettings?: ExteriorRenderingSettings
+  interiorSettings?: InteriorRenderingSettings
 }
 
 export interface ApiSuccess<T> {
