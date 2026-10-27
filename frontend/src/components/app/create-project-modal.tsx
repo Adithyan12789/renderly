@@ -1,6 +1,7 @@
 import { FolderPlus, Loader2, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { getErrorMessage } from '@/lib/api'
 import { PROJECT_TYPES } from '@/lib/site-content'
 import { projectsService } from '@/services/projects'
 import { toast } from '@/stores/toast-store'
@@ -53,7 +54,7 @@ export function CreateProjectModal({
       onClose()
     } catch (err) {
       console.error('Failed to create project:', err)
-      toast.error('Failed to create project. Please try again.')
+      toast.error(getErrorMessage(err), 'Project Creation Notice')
     } finally {
       setIsSubmitting(false)
     }

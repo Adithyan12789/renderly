@@ -9,6 +9,7 @@ import { ProjectsPage } from '@/pages/app/projects-page'
 import { RenderStudioPage } from '@/pages/app/render-studio-page'
 import { RendersPage } from '@/pages/app/renders-page'
 import { SettingsPage } from '@/pages/app/section-pages'
+import { SubscriptionPage } from '@/pages/app/subscription-page'
 import { WalkthroughsPage } from '@/pages/app/walkthroughs-page'
 import { ForgotPasswordPage } from '@/pages/auth/forgot-password-page'
 import { LoginPage } from '@/pages/auth/login-page'
@@ -51,6 +52,9 @@ export const router = createBrowserRouter([
       { path: 'editor/:id', element: <RenderStudioPage /> },
       { path: 'walkthroughs', element: <WalkthroughsPage /> },
       { path: 'walkthrough', element: <Navigate to="/app/walkthroughs" replace /> },
+      { path: 'subscription', element: <SubscriptionPage /> },
+      { path: 'plans', element: <Navigate to="/app/subscription" replace /> },
+      { path: 'pricing', element: <Navigate to="/app/subscription" replace /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

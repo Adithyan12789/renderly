@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { type AuthenticatedRequest, requireAuth } from '../middleware/auth.js'
 import { ProjectModel } from '../models/project.model.js'
 import { RenderModel, type RenderAspectRatio } from '../models/render.model.js'
+import { UserModel } from '../models/user.model.js'
 import { ImageGenerationService } from '../services/image-generation.service.js'
 import { HttpError } from '../utils/http-error.js'
 import { sendSuccess } from '../utils/respond.js'
@@ -225,6 +226,20 @@ rendersRouter.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res, 
 rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const payload = generateRenderSchema.parse(req.body)
+
+    // Check user plan render limit
+    const user = await UserModel.findById(req.user!._id)
+    if (user) {
+      const rendersCount = await RenderModel.countDocuments({ userId: user._id })
+      const limit = user.rendersLimit ?? (user.plan === 'studio' ? 100 : user.plan === 'enterprise' ? -1 : 5)
+      if (limit !== -1 && rendersCount >= limit) {
+        throw new HttpError(
+          403,
+          `You have reached the monthly render limit (${limit} renders) for your ${user.plan.toUpperCase()} plan. Please upgrade to Studio for 100 renders/month and 4K Master exports.`,
+          'PLAN_RENDER_LIMIT_REACHED',
+        )
+      }
+    }
 
     let verifiedProjectId: string | null = null
     if (payload.projectId) {

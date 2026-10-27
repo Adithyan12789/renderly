@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { type AuthenticatedRequest, optionalAuth, requireAuth } from '../middleware/auth.js'
 import { ProjectModel } from '../models/project.model.js'
+import { UserModel } from '../models/user.model.js'
 import { HttpError } from '../utils/http-error.js'
 import { sendSuccess } from '../utils/respond.js'
 
@@ -36,6 +37,20 @@ projectsRouter.get('/', requireAuth, async (req: AuthenticatedRequest, res, next
 projectsRouter.post('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const payload = createProjectSchema.parse(req.body)
+
+    // Check user plan project limit
+    const user = await UserModel.findById(req.user!._id)
+    if (user) {
+      const projectCount = await ProjectModel.countDocuments({ userId: user._id })
+      const limit = user.projectsLimit ?? (user.plan === 'studio' ? 15 : user.plan === 'enterprise' ? -1 : 1)
+      if (limit !== -1 && projectCount >= limit) {
+        throw new HttpError(
+          403,
+          `You have reached the project limit (${limit} active project) for your ${user.plan.toUpperCase()} plan. Please upgrade to Studio to create up to 15 projects.`,
+          'PLAN_PROJECT_LIMIT_REACHED',
+        )
+      }
+    }
 
     const project = await ProjectModel.create({
       userId: req.user!._id,

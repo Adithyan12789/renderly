@@ -1,9 +1,11 @@
-import { Download, Loader2, Sparkles, X } from 'lucide-react'
+import { Download, Loader2, Sparkles, X, Zap } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { resolveImageUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { rendersService } from '@/services/renders'
+import { useAuthStore } from '@/stores/auth-store'
 import { toast } from '@/stores/toast-store'
 import type { Render } from '@/types'
 
@@ -61,6 +63,8 @@ const QUALITY_OPTIONS: {
 ]
 
 export function HdDownloadModal({ isOpen, onClose, render }: HdDownloadModalProps) {
+  const user = useAuthStore((state) => state.user)
+  const isStarter = user?.plan === 'starter'
   const [selectedQuality, setSelectedQuality] = useState<ImageDownloadQuality>('4k')
   const [selectedFormat, setSelectedFormat] = useState<ImageDownloadFormat>('jpg')
   const [isDownloading, setIsDownloading] = useState(false)
@@ -255,6 +259,23 @@ export function HdDownloadModal({ isOpen, onClose, render }: HdDownloadModalProp
             </button>
           </div>
         </div>
+
+        {/* Studio Upgrade Hint for 4K/2K on Starter Plan */}
+        {isStarter && (selectedQuality === '4k' || selectedQuality === '2k') && (
+          <div className="mt-3.5 flex items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-xs">
+            <span className="flex items-center gap-1.5 text-accent font-medium">
+              <Zap className="size-3.5" />
+              <span>Ultra HD 4K & 2K Masters require Studio Pro</span>
+            </span>
+            <Link
+              to="/app/subscription"
+              onClick={onClose}
+              className="text-[11px] font-bold text-accent hover:underline"
+            >
+              Upgrade (Razorpay) →
+            </Link>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="mt-6 flex items-center justify-between gap-3 border-t border-border/80 pt-4">

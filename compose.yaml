@@ -9,6 +9,7 @@ services:
       - frontend_node_modules:/app/node_modules
     environment:
       VITE_API_URL: http://localhost:4000
+      VITE_RAZORPAY_KEY_ID: "rzp_test_Oks5Gpac00wL72"
       API_PROXY_TARGET: http://backend:4000
       CHOKIDAR_USEPOLLING: "true"
     depends_on:
@@ -24,6 +25,7 @@ services:
       PORT: "4000"
       NODE_ENV: development
       CLIENT_ORIGINS: http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000
+      RAZORPAY_KEY_ID: "rzp_test_Oks5Gpac00wL72"
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules

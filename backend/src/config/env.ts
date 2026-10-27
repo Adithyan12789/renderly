@@ -10,6 +10,8 @@ const envSchema = z
     STABILITY_API_KEY: z.string().trim().optional(),
     TRIPO_API_KEY: z.string().trim().optional(),
     AI_IMAGE_PROVIDER: z.enum(['auto', 'openai', 'stability', 'pollinations']).default('auto'),
+    RAZORPAY_KEY_ID: z.string().trim().default('rzp_test_Oks5Gpac00wL72'),
+    RAZORPAY_KEY_SECRET: z.string().trim().optional(),
   })
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.MONGODB_URI), {
     message: 'MONGODB_URI is required in production',

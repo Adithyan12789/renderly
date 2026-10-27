@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import { LogOut, User as UserIcon, X } from 'lucide-react'
 import { NavLink, useNavigate } from 'react-router'
 import { Logo } from '@/components/ui/logo'
 import { APP_NAV, APP_SECONDARY_NAV, type AppNavItem } from '@/lib/app-nav'
 import { PLAN_LIMITS } from '@/lib/site-content'
+import { rendersService } from '@/services/renders'
 import { toast } from '@/stores/toast-store'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -15,9 +17,17 @@ export function AppSidebar() {
   const setOpen = useUiStore((state) => state.setSidebarOpen)
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const [rendersCount, setRendersCount] = useState<number>(0)
 
   const planKey = user?.plan || 'starter'
   const planInfo = PLAN_LIMITS[planKey] ?? PLAN_LIMITS.starter
+
+  useEffect(() => {
+    rendersService
+      .list()
+      .then((renders) => setRendersCount(renders?.length || 0))
+      .catch(() => {})
+  }, [user])
 
   async function handleLogout() {
     await logout()
@@ -59,13 +69,20 @@ export function AppSidebar() {
             {/* Usage meters */}
             <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium capitalize text-foreground">{planInfo.label} plan</span>
-                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase">
-                  Active
-                </span>
+                <span className="text-xs font-semibold capitalize text-foreground">{planInfo.label} Plan</span>
+                <NavLink
+                  to="/app/subscription"
+                  className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold text-accent uppercase tracking-wider hover:bg-accent hover:text-white transition-colors"
+                >
+                  {planKey === 'starter' ? 'Upgrade' : 'Manage'}
+                </NavLink>
               </div>
-              <UsageMeter label="AI renders" used={0} limit={planInfo.aiRenders} />
-              <UsageMeter label="Storage" used={0} limit={planInfo.storageGb} unit="GB" />
+              <UsageMeter
+                label="AI renders"
+                used={rendersCount}
+                limit={user?.rendersLimit ?? (planKey === 'studio' ? 100 : planKey === 'enterprise' ? 999999 : 5)}
+              />
+              <UsageMeter label="Storage" used={0.2} limit={planInfo.storageGb} unit="GB" />
             </div>
 
             {/* User Profile & Logout */}

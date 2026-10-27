@@ -5,6 +5,57 @@ export interface User {
   name: string
   email: string
   plan: 'starter' | 'studio' | 'enterprise'
+  subscriptionStatus?: 'active' | 'inactive' | 'trialing' | 'canceled'
+  subscriptionPeriodEnd?: string | null
+  billingCycle?: 'monthly' | 'annual' | null
+  rendersLimit?: number
+  projectsLimit?: number
+}
+
+export interface SubscriptionPlan {
+  id: 'starter' | 'studio' | 'enterprise'
+  name: string
+  tagline: string
+  priceInr: { monthly: number; annual: number }
+  rendersLimit: number
+  projectsLimit: number
+  maxQuality: '1080p' | '4k'
+  canFlythrough: boolean
+  canRelight: boolean
+  recommended?: boolean
+  features: string[]
+}
+
+export interface UsageData {
+  plan: 'starter' | 'studio' | 'enterprise'
+  planName: string
+  subscriptionStatus: string
+  subscriptionPeriodEnd: string | null
+  billingCycle: 'monthly' | 'annual'
+  usage: {
+    rendersCount: number
+    rendersLimit: number
+    rendersRemaining: number | string
+    projectsCount: number
+    projectsLimit: number
+    projectsRemaining: number | string
+  }
+  features: {
+    maxQuality: '1080p' | '4k'
+    canFlythrough: boolean
+    canRelight: boolean
+  }
+  razorpayKeyId: string
+}
+
+export interface RazorpayOrderData {
+  orderId: string
+  amount: number
+  currency: string
+  keyId: string
+  plan: 'studio' | 'enterprise'
+  planName: string
+  billingCycle: 'monthly' | 'annual'
 }
 
 export interface Project {
