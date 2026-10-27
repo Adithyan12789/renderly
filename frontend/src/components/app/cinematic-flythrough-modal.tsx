@@ -4,21 +4,26 @@ import {
   Download,
   Eye,
   Film,
+  Folder,
   Loader2,
   Orbit,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Sparkles,
   Video,
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { CreateProjectModal } from '@/components/app/create-project-modal'
 import { Button } from '@/components/ui/button'
 import { resolveImageUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { projectsService } from '@/services/projects'
+import { rendersService } from '@/services/renders'
 import { toast } from '@/stores/toast-store'
-import type { Render } from '@/types'
+import type { Project, Render } from '@/types'
 
 interface CinematicFlythroughModalProps {
   render: Render
@@ -56,6 +61,26 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
   const [currentTime, setCurrentTime] = useState(0)
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
+  const [exportQuality, setExportQuality] = useState<'1080p' | '4k' | '720p'>('1080p')
+
+  // Project state (Required for flythrough)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [assignedProjectId, setAssignedProjectId] = useState<string>(render.projectId || '')
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false)
+
+  // Load projects if render has no project
+  useEffect(() => {
+    if (!isOpen || render.projectId) return
+    projectsService
+      .list()
+      .then((data) => {
+        setProjects(data || [])
+        if (data && data.length > 0 && !assignedProjectId) {
+          setAssignedProjectId(data[0].id)
+        }
+      })
+      .catch(console.error)
+  }, [isOpen, render.projectId])
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -115,7 +140,7 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
       const progress = (elapsed % durationSec) / durationSec
       setCurrentTime(elapsed % durationSec)
 
-      drawCinematicFrame(canvas, img, progress, selectedPath, aspectMode, enableParticles, enableSunFlare)
+      drawCinematicFrame(canvas, img, progress, selectedPath, aspectMode, enableParticles, enableSunFlare, exportQuality)
 
       animationFrameRef.current = requestAnimationFrame(renderFrame)
     }
@@ -127,7 +152,7 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [isOpen, isPlaying, durationSec, selectedPath, aspectMode, enableParticles, enableSunFlare])
+  }, [isOpen, isPlaying, durationSec, selectedPath, aspectMode, enableParticles, enableSunFlare, exportQuality])
 
   function drawCinematicFrame(
     canvas: HTMLCanvasElement,
@@ -137,13 +162,20 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
     aspect: AspectRatioMode,
     particles: boolean,
     sunFlare: boolean,
+    quality: '1080p' | '4k' | '720p' = '1080p',
   ) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Set canvas internal resolution
-    const targetWidth = 1920
-    const targetHeight = aspect === '2.39:1' ? 804 : aspect === '9:16' ? 3413 : 1080
+    // Set canvas internal resolution based on selected quality
+    const baseWidth = quality === '4k' ? 3840 : quality === '720p' ? 1280 : 1920
+    const targetWidth = baseWidth
+    const targetHeight =
+      aspect === '2.39:1'
+        ? Math.round(baseWidth / 2.39)
+        : aspect === '9:16'
+        ? Math.round((baseWidth * 16) / 9)
+        : Math.round((baseWidth * 9) / 16)
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
       canvas.width = targetWidth
       canvas.height = targetHeight
@@ -269,6 +301,17 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
 
   // Export Flythrough Video (Browser native MediaRecorder)
   async function handleExportVideo() {
+    const finalProjectId = render.projectId || assignedProjectId
+    if (!finalProjectId) {
+      toast.error('A project is required to export this flythrough. Please select or create a project first.', 'Project Required')
+      setIsCreateProjectOpen(true)
+      return
+    }
+
+    if (!render.projectId && assignedProjectId) {
+      rendersService.update(render.id, { projectId: assignedProjectId }).catch(console.error)
+    }
+
     const canvas = canvasRef.current
     const img = imageRef.current
     if (!canvas || !img) return
@@ -282,9 +325,16 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
       const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4']
       const chosenMime = mimeTypes.find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm'
 
+      const bitrate =
+        exportQuality === '4k'
+          ? 35_000_000
+          : exportQuality === '720p'
+          ? 8_000_000
+          : 16_000_000
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: chosenMime,
-        videoBitsPerSecond: 12_000_000, // 12 Mbps crystal clear
+        videoBitsPerSecond: bitrate,
       })
 
       const chunks: Blob[] = []
@@ -297,12 +347,12 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `renderly-flythrough-${selectedPath}-${render.id}.webm`
+        a.download = `renderly-flythrough-${exportQuality.toUpperCase()}-${selectedPath}-${render.id}.webm`
         a.click()
         URL.revokeObjectURL(url)
         setIsExporting(false)
         setIsPlaying(true)
-        toast.success('Cinematic flythrough video exported successfully!', 'Video Exported')
+        toast.success(`Cinematic flythrough (${exportQuality.toUpperCase()}) exported successfully!`, 'Video Exported')
       }
 
       mediaRecorder.start()
@@ -318,7 +368,16 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
         }
 
         const progress = frame / totalFrames
-        drawCinematicFrame(canvas, img, progress, selectedPath, aspectMode, enableParticles, enableSunFlare)
+        drawCinematicFrame(
+          canvas,
+          img,
+          progress,
+          selectedPath,
+          aspectMode,
+          enableParticles,
+          enableSunFlare,
+          exportQuality,
+        )
         setExportProgress(Math.round(progress * 100))
         frame++
 
@@ -380,20 +439,26 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
         {/* Content Body */}
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Main Stage Canvas Player */}
-          <div className="lg:col-span-8 flex flex-col items-center justify-center bg-black/80 p-5 gap-4">
+          <div className="lg:col-span-8 flex flex-col items-center justify-center bg-black/80 p-4 sm:p-5 gap-3 max-h-[72vh]">
             <div
               className={cn(
-                'relative w-full overflow-hidden rounded-2xl border border-border bg-black shadow-2xl transition-all',
-                aspectMode === '2.39:1' ? 'aspect-[2.39/1]' : aspectMode === '9:16' ? 'aspect-[9/16] max-h-[58vh]' : 'aspect-[16/9]',
+                'relative flex items-center justify-center w-full max-h-[56vh] overflow-hidden rounded-2xl border border-border bg-black shadow-2xl transition-all',
+                aspectMode === '2.39:1' ? 'aspect-[2.39/1]' : aspectMode === '9:16' ? 'aspect-[9/16]' : 'aspect-[16/9]',
               )}
             >
-              <canvas ref={canvasRef} className="size-full object-contain" />
+              <canvas ref={canvasRef} className="max-h-full max-w-full object-contain" />
 
               {/* Top Status Overlays */}
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="flex items-center gap-1.5 rounded-full bg-black/75 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md border border-white/15 uppercase">
                   <span className="size-2 rounded-full bg-red-500 animate-pulse" />
-                  <span>Cinematic 60FPS</span>
+                  <span>
+                    {exportQuality === '4k'
+                      ? 'Ultra HD 4K · 60FPS'
+                      : exportQuality === '720p'
+                      ? 'HD 720p · 60FPS'
+                      : 'Full HD 1080p · 60FPS'}
+                  </span>
                 </span>
                 <span className="rounded-full bg-accent/80 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-md uppercase">
                   {selectedPath.replace('-', ' ')}
@@ -513,6 +578,40 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
                 </div>
               </div>
 
+              {/* Export Resolution Quality */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+                    Export Resolution Quality
+                  </label>
+                  <span className="text-[10px] font-bold text-accent uppercase">
+                    {exportQuality === '4k' ? 'Ultra HD 4K' : exportQuality === '1080p' ? 'Full HD 1080p' : '720p Fast'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: '1080p', label: '1080p HD', sub: 'High Fidelity' },
+                    { id: '4k', label: '4K Ultra HD', sub: 'Cinema Master' },
+                    { id: '720p', label: '720p Fast', sub: 'Quick Share' },
+                  ].map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setExportQuality(q.id as '1080p' | '4k' | '720p')}
+                      className={cn(
+                        'flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all',
+                        exportQuality === q.id
+                          ? 'border-accent bg-accent/15 text-foreground font-semibold shadow-sm ring-1 ring-accent'
+                          : 'border-border bg-background text-muted hover:text-foreground hover:border-border-strong',
+                      )}
+                    >
+                      <span className="text-xs font-semibold">{q.label}</span>
+                      <span className="text-[9px] text-muted">{q.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Duration Control */}
               <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -571,7 +670,38 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
               </div>
             </div>
 
-            {/* Bottom Actions */}
+              {!render.projectId && (
+                <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Folder className="size-3.5 text-accent" />
+                      <span>Assign to Project</span>
+                      <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[9px] font-semibold text-accent uppercase">
+                        Required
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateProjectOpen(true)}
+                      className="text-[11px] text-accent hover:underline flex items-center gap-0.5 font-medium"
+                    >
+                      <Plus className="size-3" /> New
+                    </button>
+                  </div>
+                  <select
+                    value={assignedProjectId}
+                    onChange={(e) => setAssignedProjectId(e.target.value)}
+                    className="h-8.5 rounded-lg border border-border bg-background px-2.5 text-xs text-foreground focus:border-accent focus:outline-none"
+                  >
+                    <option value="" disabled>Select a project…</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Bottom Actions */}
             <div className="flex items-center justify-between border-t border-border pt-4 gap-3">
               <Button variant="ghost" size="sm" onClick={onClose}>
                 Close
@@ -598,6 +728,18 @@ export function CinematicFlythroughModal({ render, isOpen, onClose }: CinematicF
           </div>
         </div>
       </div>
+
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateProjectOpen}
+        onClose={() => setIsCreateProjectOpen(false)}
+        onSuccess={(newProj) => {
+          setProjects((prev) => [newProj, ...prev])
+          setAssignedProjectId(newProj.id)
+        }}
+        title="Create Project for Flythrough"
+        description="Flythrough videos must be associated with an architectural project for organization."
+      />
     </div>
   )
 }

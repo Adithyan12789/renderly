@@ -261,13 +261,19 @@ export function RenderEditModal({ render, isOpen, onClose, onRenderUpdated }: Re
         {/* Content Body */}
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Left Preview Stage */}
-          <div className="lg:col-span-7 flex flex-col justify-center items-center bg-black/40 p-6">
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border bg-black shadow-2xl">
-              <div className="relative size-full">
+          <div className="lg:col-span-7 flex flex-col justify-center items-center bg-black/40 p-4 sm:p-6 min-h-[320px]">
+            <div className={cn(
+              "relative flex items-center justify-center w-full max-h-[62vh] overflow-hidden rounded-2xl border border-border bg-black shadow-2xl",
+              render.aspectRatio === '1:1' ? 'aspect-square' :
+              render.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+              render.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+              'aspect-[16/9]'
+            )}>
+              <div className="relative flex items-center justify-center size-full">
                 <img
                   src={resolveImageUrl(render.imageUrl)}
                   alt="Render Preview"
-                  className="size-full object-cover transition-all duration-100"
+                  className="size-full object-contain transition-all duration-100"
                   style={
                     activeTab === 'color-grading'
                       ? {

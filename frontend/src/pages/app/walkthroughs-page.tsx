@@ -2,24 +2,29 @@ import {
   Camera,
   Download,
   Film,
+  Folder,
+  FolderPlus,
   Loader2,
   Orbit,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Sparkles,
   Video,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { CreateProjectModal } from '@/components/app/create-project-modal'
 import { PageHeader } from '@/components/app/page-header'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { resolveImageUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { projectsService } from '@/services/projects'
 import { rendersService } from '@/services/renders'
 import { toast } from '@/stores/toast-store'
-import type { Render } from '@/types'
+import type { Project, Render } from '@/types'
 
 type CameraPath = 'push-in' | 'orbit' | 'crane-rise' | 'dolly-zoom' | 'lateral-pan'
 type AspectRatioMode = '16:9' | '2.39:1' | '9:16'
@@ -40,6 +45,9 @@ const CAMERA_PATHS: CameraPathOption[] = [
 
 export function WalkthroughsPage() {
   const [renders, setRenders] = useState<Render[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false)
   const [selectedRender, setSelectedRender] = useState<Render | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -55,6 +63,7 @@ export function WalkthroughsPage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
+  const [exportQuality, setExportQuality] = useState<'1080p' | '4k' | '720p'>('1080p')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationFrameRef = useRef<number | null>(null)
@@ -62,18 +71,26 @@ export function WalkthroughsPage() {
   const imageRef = useRef<HTMLImageElement | null>(null)
   const particlesRef = useRef<Array<{ x: number; y: number; size: number; speedX: number; speedY: number; opacity: number }>>([])
 
-  // Load Renders
+  // Load Projects & Renders
   useEffect(() => {
     let mounted = true
-    rendersService.list()
-      .then((data) => {
+    Promise.all([projectsService.list(), rendersService.list()])
+      .then(([projectsData, rendersData]) => {
         if (!mounted) return
-        setRenders(data || [])
-        if (data && data.length > 0) {
-          setSelectedRender(data[0])
+        setProjects(projectsData || [])
+        setRenders(rendersData || [])
+        if (projectsData && projectsData.length > 0) {
+          const initialProjectId = projectsData[0].id
+          setSelectedProjectId(initialProjectId)
+          const matchedRenders = (rendersData || []).filter((r) => r.projectId === initialProjectId)
+          if (matchedRenders.length > 0) {
+            setSelectedRender(matchedRenders[0])
+          } else if (rendersData && rendersData.length > 0) {
+            setSelectedRender(rendersData[0])
+          }
         }
       })
-      .catch((err) => console.error('Failed to load renders for walkthroughs:', err))
+      .catch((err) => console.error('Failed to load data for walkthroughs:', err))
       .finally(() => {
         if (mounted) setIsLoading(false)
       })
@@ -153,12 +170,19 @@ export function WalkthroughsPage() {
     aspect: AspectRatioMode,
     particles: boolean,
     sunFlare: boolean,
+    quality: '1080p' | '4k' | '720p' = '1080p',
   ) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const targetWidth = 1920
-    const targetHeight = aspect === '2.39:1' ? 804 : aspect === '9:16' ? 3413 : 1080
+    const baseWidth = quality === '4k' ? 3840 : quality === '720p' ? 1280 : 1920
+    const targetWidth = baseWidth
+    const targetHeight =
+      aspect === '2.39:1'
+        ? Math.round(targetWidth / 2.39)
+        : aspect === '9:16'
+        ? Math.round((targetWidth * 16) / 9)
+        : Math.round((targetWidth * 9) / 16)
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
       canvas.width = targetWidth
       canvas.height = targetHeight
@@ -255,9 +279,18 @@ export function WalkthroughsPage() {
   }
 
   async function handleExportVideo() {
+    if (!selectedProjectId) {
+      toast.error('A project is required to export a flythrough walkthrough. Please select or create a project first.', 'Project Required')
+      setIsCreateProjectOpen(true)
+      return
+    }
+
     const canvas = canvasRef.current
     const img = imageRef.current
-    if (!canvas || !img || !selectedRender) return
+    if (!canvas || !img || !selectedRender) {
+      toast.error('Please select a render from this project to animate.')
+      return
+    }
 
     try {
       setIsExporting(true)
@@ -268,9 +301,16 @@ export function WalkthroughsPage() {
       const mimeTypes = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4']
       const chosenMime = mimeTypes.find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm'
 
+      const bitrate =
+        exportQuality === '4k'
+          ? 35_000_000
+          : exportQuality === '720p'
+          ? 8_000_000
+          : 16_000_000
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: chosenMime,
-        videoBitsPerSecond: 12_000_000,
+        videoBitsPerSecond: bitrate,
       })
 
       const chunks: Blob[] = []
@@ -283,12 +323,15 @@ export function WalkthroughsPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `renderly-flythrough-${selectedPath}-${selectedRender.id}.webm`
+        a.download = `renderly-flythrough-${exportQuality.toUpperCase()}-${selectedPath}-${selectedRender.id}.webm`
         a.click()
         URL.revokeObjectURL(url)
         setIsExporting(false)
         setIsPlaying(true)
-        toast.success('Cinematic flythrough video exported successfully!', 'Video Exported')
+        toast.success(
+          `Cinematic flythrough video (${exportQuality.toUpperCase()}) exported successfully!`,
+          'Video Exported',
+        )
       }
 
       mediaRecorder.start()
@@ -303,7 +346,7 @@ export function WalkthroughsPage() {
         }
 
         const progress = frame / totalFrames
-        drawFrame(canvas, img, progress, selectedPath, aspectMode, enableParticles, enableSunFlare)
+        drawFrame(canvas, img, progress, selectedPath, aspectMode, enableParticles, enableSunFlare, exportQuality)
         setExportProgress(Math.round(progress * 100))
         frame++
 
@@ -328,8 +371,23 @@ export function WalkthroughsPage() {
     }
   }
 
+  const handleSelectProject = (projectId: string) => {
+    setSelectedProjectId(projectId)
+    const matchingRenders = renders.filter((r) => r.projectId === projectId)
+    if (matchingRenders.length > 0) {
+      setSelectedRender(matchingRenders[0])
+    } else {
+      setSelectedRender(null)
+    }
+  }
+
+  const matchedProject = projects.find((p) => p.id === selectedProjectId)
+  const projectRenders = selectedProjectId
+    ? renders.filter((r) => r.projectId === selectedProjectId)
+    : []
+
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-8">
       <PageHeader
         title="Cinematic Walkthroughs & Flythroughs"
         description="Transform your architectural visualizations into smooth 60fps drone flythroughs, crane sweeps, and client presentation videos (Vibe3D engine)."
@@ -339,18 +397,83 @@ export function WalkthroughsPage() {
         <div className="flex items-center justify-center py-24 text-muted">
           <Loader2 className="size-8 animate-spin" />
         </div>
-      ) : renders.length === 0 ? (
+      ) : projects.length === 0 ? (
         <EmptyState
-          icon={Film}
-          title="No renders available for flythroughs"
-          description="Synthesize an architectural render in the Render Studio first, then come here to generate cinematic walkthrough videos."
+          icon={FolderPlus}
+          title="Create a project to generate flythroughs"
+          description="Cinematic flythrough walkthroughs must belong to an architectural project. Create your first project to get started."
           action={
-            <Link to="/app/renders">
-              <Button size="sm">Go to Render Studio</Button>
-            </Link>
+            <Button onClick={() => setIsCreateProjectOpen(true)}>
+              <Plus className="size-4" /> Create First Project
+            </Button>
           }
         />
       ) : (
+        <div className="flex flex-col gap-6">
+          {/* Active Project Selector Bar (Required) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-xl bg-accent/15 text-accent border border-accent/20">
+                <Folder className="size-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    Project: {matchedProject?.name || 'Select Project'}
+                  </span>
+                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
+                    Required
+                  </span>
+                </div>
+                <p className="text-xs text-muted">
+                  Cinematic flythrough walkthroughs and exports are tied to your active project.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedProjectId}
+                onChange={(e) => handleSelectProject(e.target.value)}
+                className="h-10 min-w-[200px] rounded-xl border border-border bg-background px-3 text-xs text-foreground focus:border-accent focus:outline-none"
+              >
+                {projects.map((proj) => (
+                  <option key={proj.id} value={proj.id}>
+                    {proj.name} ({proj.type})
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCreateProjectOpen(true)}
+                className="gap-1.5 h-10 px-3.5 shrink-0"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New Project</span>
+              </Button>
+            </div>
+          </div>
+
+          {projectRenders.length === 0 ? (
+            <EmptyState
+              icon={Film}
+              title={`No renders in "${matchedProject?.name || 'this project'}" yet`}
+              description="Upload a 3D model viewport capture and synthesize renders for this project in Render Studio before generating flythroughs."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Link to={`/app/exterior?projectId=${selectedProjectId}`}>
+                    <Button size="sm">Go to Exterior Studio</Button>
+                  </Link>
+                  <Link to={`/app/interior?projectId=${selectedProjectId}`}>
+                    <Button size="sm" variant="outline">Go to Interior Studio</Button>
+                  </Link>
+                </div>
+              }
+            />
+          ) : (
         <div className="flex flex-col gap-8">
           {/* Main Stage & Studio Card */}
           <div className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 shadow-2xl backdrop-blur-xl md:p-8">
@@ -378,14 +501,18 @@ export function WalkthroughsPage() {
                   {isExporting && (
                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm gap-3 p-6 text-center">
                       <Loader2 className="size-8 text-accent animate-spin" />
-                      <p className="text-sm font-semibold text-white">Encoding 60fps Architectural Video…</p>
+                      <p className="text-sm font-semibold text-white">
+                        Encoding {exportQuality === '4k' ? 'Ultra HD 4K (3840×2160)' : exportQuality === '1080p' ? 'Full HD 1080p' : 'HD 720p'} 60fps Video…
+                      </p>
                       <div className="w-64 h-2 bg-white/20 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-accent transition-all duration-150"
                           style={{ width: `${exportProgress}%` }}
                         />
                       </div>
-                      <span className="text-xs text-muted">{exportProgress}% rendered</span>
+                      <span className="text-xs text-muted">
+                        {exportProgress}% rendered • {exportQuality.toUpperCase()} 60FPS
+                      </span>
                     </div>
                   )}
                 </div>
@@ -538,23 +665,53 @@ export function WalkthroughsPage() {
                       </label>
                     </div>
                   </div>
+
+                  {/* Video Export Quality Selector */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground">Export Resolution Quality</label>
+                      <span className="text-[10px] text-accent font-bold uppercase">60 FPS Native</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: '1080p', label: '1080p HD', desc: 'Full HD' },
+                        { id: '4k', label: '4K Ultra HD', desc: 'Master' },
+                        { id: '720p', label: '720p Fast', desc: 'Quick' },
+                      ].map((q) => (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => setExportQuality(q.id as '1080p' | '4k' | '720p')}
+                          className={cn(
+                            'flex flex-col items-center py-2 px-1 rounded-xl border text-center transition-all',
+                            exportQuality === q.id
+                              ? 'border-accent bg-accent/15 text-foreground font-semibold ring-1 ring-accent'
+                              : 'border-border bg-background text-muted hover:text-foreground',
+                          )}
+                        >
+                          <span className="text-xs font-semibold">{q.label}</span>
+                          <span className="text-[9px] text-muted">{q.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <Button
                   size="lg"
                   onClick={handleExportVideo}
                   disabled={isExporting}
-                  className="w-full shadow-lg shadow-accent/20"
+                  className="w-full shadow-lg shadow-accent/20 gap-2"
                 >
                   {isExporting ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Exporting {exportProgress}%
+                      Exporting {exportQuality.toUpperCase()} {exportProgress}%
                     </>
                   ) : (
                     <>
                       <Download className="size-4" />
-                      Export 60FPS Video (MP4 / WebM)
+                      Export {exportQuality.toUpperCase()} 60FPS Video (WebM/MP4)
                     </>
                   )}
                 </Button>
@@ -562,13 +719,18 @@ export function WalkthroughsPage() {
             </div>
           </div>
 
-          {/* Select Render from Gallery */}
+          {/* Select Render from Active Project Gallery */}
           <div className="flex flex-col gap-4">
-            <h3 className="text-lg font-medium tracking-tight text-foreground">
-              Select an Architectural Render to Animate
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium tracking-tight text-foreground">
+                Select an Architectural Render to Animate
+              </h3>
+              <span className="text-xs text-muted">
+                {projectRenders.length} {projectRenders.length === 1 ? 'render' : 'renders'} in this project
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {renders.map((render) => {
+              {projectRenders.map((render) => {
                 const isSelected = selectedRender?.id === render.id
                 return (
                   <button
@@ -602,6 +764,20 @@ export function WalkthroughsPage() {
           </div>
         </div>
       )}
+        </div>
+      )}
+
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateProjectOpen}
+        onClose={() => setIsCreateProjectOpen(false)}
+        onSuccess={(newProj) => {
+          setProjects((prev) => [newProj, ...prev])
+          handleSelectProject(newProj.id)
+        }}
+        title="Create Project for Flythrough"
+        description="Flythrough motion walkthroughs must be linked to a project for organization and presentation exports."
+      />
     </div>
   )
 }

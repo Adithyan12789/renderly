@@ -1,4 +1,4 @@
-import { Film, ImageIcon, Loader2, Sparkles, type LucideIcon } from 'lucide-react'
+import { Building2, Film, ImageIcon, Loader2, Sofa, Sparkles, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { ProjectsBrowser } from '@/components/app/projects-browser'
@@ -13,8 +13,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { Project, Render } from '@/types'
 
 const QUICK_ACTIONS: { label: string; description: string; to: string; icon: LucideIcon }[] = [
-  { label: 'AI Render Studio', description: 'Upload a 3D model & generate photoreal stills', to: '/app/renders', icon: Sparkles },
-  { label: 'Walkthroughs', description: 'Generate 60fps cinematic flythroughs', to: '/app/walkthroughs', icon: Film },
+  { label: 'Exterior Studio', description: 'Upload a 3D model & generate architectural facades & exteriors', to: '/app/exterior', icon: Building2 },
+  { label: 'Interior Studio', description: 'Transform room blockouts into photorealistic interior spaces', to: '/app/interior', icon: Sofa },
+  { label: 'Walkthrough', description: 'Generate 60fps cinematic camera flythroughs', to: '/app/walkthroughs', icon: Film },
   { label: 'Projects Workspace', description: 'Manage project architectural scenes', to: '/app/projects', icon: ImageIcon },
 ]
 
@@ -77,7 +78,7 @@ export function DashboardPage() {
         <h2 id="quick-actions" className="sr-only">
           Quick actions
         </h2>
-        <ul className="grid gap-3 md:grid-cols-3">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {QUICK_ACTIONS.map((action) => (
             <li key={action.label}>
               <Link

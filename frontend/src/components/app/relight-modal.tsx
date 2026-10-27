@@ -165,12 +165,18 @@ export function RelightModal({ render, isOpen, onClose, onRelitSuccess }: Religh
         {/* Content Body */}
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Left: Interactive Preview */}
-          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-6">
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border/80 bg-black shadow-2xl">
+          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-4 sm:p-6 min-h-[320px]">
+            <div className={cn(
+              "relative flex items-center justify-center w-full max-h-[62vh] overflow-hidden rounded-2xl border border-border/80 bg-black shadow-2xl",
+              render.aspectRatio === '1:1' ? 'aspect-square' :
+              render.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+              render.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+              'aspect-[16/9]'
+            )}>
               <img
                 src={resolveImageUrl(render.imageUrl)}
                 alt="Relight Preview"
-                className="size-full object-cover"
+                className="size-full object-contain"
                 style={getFilterStyle()}
               />
 

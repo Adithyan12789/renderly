@@ -1,4 +1,7 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { Router } from 'express'
+import sharp from 'sharp'
 import { z } from 'zod'
 import { type AuthenticatedRequest, requireAuth } from '../middleware/auth.js'
 import { ProjectModel } from '../models/project.model.js'
@@ -33,6 +36,8 @@ const generateRenderSchema = z
     aspectRatio: z.enum(['16:9', '4:3', '1:1', '9:16']).optional(),
     projectId: z.string().trim().optional().nullable(),
     setAsThumbnail: z.boolean().default(false),
+    category: z.enum(['exterior', 'interior']).default('exterior'),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .refine((data) => Boolean(data.image || data.prompt), {
     message: 'Please upload an image (3D model screenshot / photo) or enter an architectural description.',
@@ -56,13 +61,14 @@ rendersRouter.get('/', requireAuth, async (req: AuthenticatedRequest, res, next)
 })
 
 // Helper to find a render by ID (checks user ownership, falls back to ID for demo/shared scenes)
-async function findRenderForUser(renderId: string, userId?: unknown) {
+async function findRenderForUser(renderId: string | string[], userId?: unknown) {
+  const idStr = Array.isArray(renderId) ? renderId[0] : renderId
   let render = null
   if (userId) {
-    render = await RenderModel.findOne({ _id: renderId, userId })
+    render = await RenderModel.findOne({ _id: idStr, userId })
   }
   if (!render) {
-    render = await RenderModel.findById(renderId)
+    render = await RenderModel.findById(idStr)
   }
   return render
 }
@@ -75,6 +81,104 @@ rendersRouter.get('/:id', requireAuth, async (req: AuthenticatedRequest, res, ne
       throw new HttpError(404, 'Render not found', 'RENDER_NOT_FOUND')
     }
     return sendSuccess(res, { render: render.toRenderJSON() })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// HD Quality Download route for rendered image (supports 1080p, 2k, 4k, original; jpg/png)
+rendersRouter.get('/:id/download', async (req, res, next) => {
+  try {
+    const idStr = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
+    const render = await RenderModel.findById(idStr)
+    if (!render) {
+      throw new HttpError(404, 'Render not found', 'RENDER_NOT_FOUND')
+    }
+
+    const quality = (req.query.quality as string) || '1080p'
+    const format = (req.query.format as string) === 'png' ? 'png' : 'jpg'
+
+    let localImagePath = ''
+    if (render.imageUrl && render.imageUrl.startsWith('/uploads/')) {
+      const rel = render.imageUrl.replace(/^\//, '')
+      const possiblePaths = [
+        path.resolve(process.cwd(), rel),
+        path.resolve(process.cwd(), 'backend', rel),
+      ]
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          localImagePath = p
+          break
+        }
+      }
+    }
+
+    let inputBuffer: Buffer | null = null
+    if (localImagePath && fs.existsSync(localImagePath)) {
+      inputBuffer = fs.readFileSync(localImagePath)
+    } else if (
+      render.imageUrl &&
+      (render.imageUrl.startsWith('http://') || render.imageUrl.startsWith('https://'))
+    ) {
+      const resp = await fetch(render.imageUrl)
+      inputBuffer = Buffer.from(await resp.arrayBuffer())
+    }
+
+    if (!inputBuffer && render.imageUrl) {
+      const publicPath = path.resolve(
+        process.cwd(),
+        '..',
+        'frontend',
+        'public',
+        render.imageUrl.replace(/^\//, ''),
+      )
+      if (fs.existsSync(publicPath)) {
+        inputBuffer = fs.readFileSync(publicPath)
+      }
+    }
+
+    if (!inputBuffer) {
+      throw new HttpError(404, 'Image asset not found', 'ASSET_NOT_FOUND')
+    }
+
+    const downloadFilename = `renderly-${quality}-${idStr}.${format}`
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`)
+
+    if (quality === 'original' && format === 'jpg') {
+      res.setHeader('Content-Type', 'image/jpeg')
+      return res.send(inputBuffer)
+    }
+
+    let targetWidth: number | null = null
+    let unsharpSigma = 0.8
+
+    if (quality === '4k') {
+      targetWidth = 3840
+      unsharpSigma = 1.2
+    } else if (quality === '2k') {
+      targetWidth = 2048
+      unsharpSigma = 0.9
+    } else if (quality === '1080p') {
+      targetWidth = 1920
+      unsharpSigma = 0.6
+    }
+
+    let transform = sharp(inputBuffer)
+    if (targetWidth) {
+      transform = transform
+        .resize({ width: targetWidth, withoutEnlargement: false, kernel: sharp.kernel.lanczos3 })
+        .sharpen({ sigma: unsharpSigma, m1: 1.0, m2: 0.5 })
+    }
+
+    if (format === 'png') {
+      res.setHeader('Content-Type', 'image/png')
+      const outputBuffer = await transform.png({ compressionLevel: 8 }).toBuffer()
+      return res.send(outputBuffer)
+    } else {
+      res.setHeader('Content-Type', 'image/jpeg')
+      const outputBuffer = await transform.jpeg({ quality: 98, mozjpeg: true }).toBuffer()
+      return res.send(outputBuffer)
+    }
   } catch (error) {
     next(error)
   }
@@ -154,13 +258,15 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
         geometryStrength: payload.geometryStrength,
         refinementPrompt: payload.refinementPrompt || payload.prompt,
         aspectRatio: payload.aspectRatio,
+        category: payload.category,
       })
 
       if (!finalPrompt) {
         const styleName = payload.style.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
         const lightingName = payload.lighting.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
         const engineName = payload.engine.replace(/\b\w/g, (c) => c.toUpperCase())
-        finalPrompt = `${engineName} ${styleName} Architecture · ${lightingName}`
+        const categoryLabel = payload.category === 'interior' ? 'Interior' : 'Exterior'
+        finalPrompt = `${engineName} ${styleName} ${categoryLabel} · ${lightingName}`
       }
     } else {
       // 2. Legacy prompt-only generation
@@ -187,6 +293,10 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       imageUrl: genResult.imageUrl,
       status: 'completed',
       provider: genResult.provider,
+      metadata: {
+        ...(payload.metadata || {}),
+        category: payload.category || 'exterior',
+      },
     })
 
     // If setAsThumbnail was requested, update project thumbnail

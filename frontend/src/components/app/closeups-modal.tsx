@@ -140,17 +140,23 @@ export function CloseupsModal({ render, isOpen, onClose, onCloseupSuccess }: Clo
         {/* Content Body */}
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Left: Interactive Canvas with Pin Targets */}
-          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-6">
+          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-4 sm:p-6 min-h-[320px]">
             {!generatedResults ? (
               <div
                 ref={imageContainerRef}
                 onClick={handleImageClick}
-                className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border/80 bg-black shadow-2xl cursor-crosshair group"
+                className={cn(
+                  "relative flex items-center justify-center w-full max-h-[62vh] overflow-hidden rounded-2xl border border-border/80 bg-black shadow-2xl cursor-crosshair group",
+                  render.aspectRatio === '1:1' ? 'aspect-square' :
+                  render.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+                  render.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+                  'aspect-[16/9]'
+                )}
               >
                 <img
                   src={resolveImageUrl(render.imageUrl)}
                   alt="Render Viewport"
-                  className="size-full object-cover select-none pointer-events-none"
+                  className="size-full object-contain select-none pointer-events-none"
                 />
 
                 {/* Target Pin Markers */}
@@ -197,12 +203,18 @@ export function CloseupsModal({ render, isOpen, onClose, onCloseupSuccess }: Clo
               </div>
             ) : (
               /* Generated Results Gallery */
-              <div className="flex flex-col gap-4 w-full">
-                <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border bg-black shadow-2xl">
+              <div className="flex flex-col gap-4 w-full items-center">
+                <div className={cn(
+                  "relative flex items-center justify-center w-full max-h-[58vh] overflow-hidden rounded-2xl border border-border bg-black shadow-2xl",
+                  render.aspectRatio === '1:1' ? 'aspect-square' :
+                  render.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+                  render.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+                  'aspect-[16/9]'
+                )}>
                   <img
                     src={resolveImageUrl(generatedResults.render.imageUrl)}
                     alt="Generated Closeups"
-                    className="size-full object-cover"
+                    className="size-full object-contain"
                   />
                   <div className="absolute top-3 left-3">
                     <span className="rounded-full bg-accent px-3 py-1 text-[11px] font-bold text-background uppercase tracking-wider">

@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { BeforeAfterSlider } from '@/components/app/before-after-slider'
 import { Button } from '@/components/ui/button'
 import { resolveImageUrl } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { rendersService } from '@/services/renders'
 import { toast } from '@/stores/toast-store'
 import type { Render } from '@/types'
@@ -86,14 +87,21 @@ export function HyperRealEnhanceModal({
         {/* Content Body */}
         <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           {/* Left: Before & After Comparison Stage */}
-          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-6">
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-2xl border border-border bg-black shadow-2xl">
+          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-black/50 p-4 sm:p-6 min-h-[320px]">
+            <div className={cn(
+              "relative flex items-center justify-center w-full max-h-[62vh] overflow-hidden rounded-2xl border border-border bg-black shadow-2xl",
+              render.aspectRatio === '1:1' ? 'aspect-square' :
+              render.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+              render.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+              'aspect-[16/9]'
+            )}>
               <BeforeAfterSlider
                 beforeSrc={resolveImageUrl(render.imageUrl)}
                 afterSrc={enhancedRender ? resolveImageUrl(enhancedRender.imageUrl) : resolveImageUrl(render.imageUrl)}
                 beforeLabel="ORIGINAL RENDER"
                 afterLabel={enhancedRender ? 'HYPERREAL 8K' : 'HYPERREAL PREVIEW'}
-                aspectClass="aspect-[16/9]"
+                aspectClass="size-full"
+                objectFit="contain"
               />
             </div>
           </div>

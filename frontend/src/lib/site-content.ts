@@ -166,19 +166,39 @@ export const LIGHTING_PRESETS: LightingOption[] = [
   { value: 'night', label: 'Dramatic Night', tagline: 'Moody architectural spotlights & starlit pool' },
 ]
 
+export const INTERIOR_LIGHTING_PRESETS: LightingOption[] = [
+  { value: 'golden-hour', label: 'Sunset Window Glow', tagline: 'Warm rays pouring through large glazing' },
+  { value: 'daylight', label: 'Natural Window Daylight', tagline: 'Bright balanced daylight & airy ambiance' },
+  { value: 'dusk', label: 'Evening Cove & Lamps', tagline: 'Warm 2700K indirect cove LEDs & designer lamps' },
+  { value: 'overcast', label: 'Diffused Soft Daylight', tagline: 'Gentle shadowless architectural editorial light' },
+  { value: 'night', label: 'Intimate Night Mood', tagline: 'Moody accent spotlights & warm chandelier glow' },
+]
+
 export interface EnvironmentOption {
   value: string
   label: string
   tagline: string
 }
 
-export const ENVIRONMENT_PRESETS: EnvironmentOption[] = [
+export const EXTERIOR_ENVIRONMENT_PRESETS: EnvironmentOption[] = [
   { value: 'landscaped-gardens', label: 'Lush Gardens & Pool', tagline: 'Manicured lawns, exotic palms & reflection water' },
   { value: 'pine-forest', label: 'Misty Pine Forest', tagline: 'Atmospheric alpine conifers & mountain fog' },
   { value: 'coastal', label: 'Coastal Oceanfront', tagline: 'Azure horizon, gentle sea spray & reflection' },
   { value: 'urban', label: 'Modern Urban Street', tagline: 'Metropolitan sidewalk, wet asphalt & streetlamps' },
   { value: 'zen', label: 'Zen Rock Courtyard', tagline: 'Raked gravel, sculptural Japanese maple & stone' },
+  { value: 'desert', label: 'Desert Horizon & Cacti', tagline: 'Warm earth tones, rock formations & desert sands' },
 ]
+
+export const INTERIOR_ENVIRONMENT_PRESETS: EnvironmentOption[] = [
+  { value: 'interior-living', label: 'Double-Height Living Salon', tagline: 'Spacious open-concept living area with bespoke furniture' },
+  { value: 'interior-kitchen', label: 'Designer Chef Kitchen', tagline: 'Monolithic marble island & custom minimalist cabinetry' },
+  { value: 'interior-bedroom', label: 'Master Suite Sanctuary', tagline: 'Upholstered platform bed, sheer drapes & warm woods' },
+  { value: 'interior-bathroom', label: 'Minimalist Spa Bathroom', tagline: 'Freestanding tub, stone slabs & brushed brass' },
+  { value: 'interior-lounge', label: 'Penthouse Lounge & Bar', tagline: 'Moody velvet seating, bronze glass & ambient display' },
+  { value: 'interior-office', label: 'Executive Sunlit Studio', tagline: 'Acoustic slatted wood, walnut desk & city views' },
+]
+
+export const ENVIRONMENT_PRESETS: EnvironmentOption[] = EXTERIOR_ENVIRONMENT_PRESETS
 
 export interface Sample3DModel {
   id: string
@@ -189,7 +209,7 @@ export interface Sample3DModel {
   aspectRatio: '16:9' | '4:3' | '1:1'
 }
 
-export const SAMPLE_3D_MODELS: Sample3DModel[] = [
+export const EXTERIOR_SAMPLE_MODELS: Sample3DModel[] = [
   {
     id: 'villa-clay',
     title: 'Modern Villa Clay Model',
@@ -206,6 +226,9 @@ export const SAMPLE_3D_MODELS: Sample3DModel[] = [
     description: 'Surface model of a glass and concrete garden pavilion.',
     aspectRatio: '16:9',
   },
+]
+
+export const INTERIOR_SAMPLE_MODELS: Sample3DModel[] = [
   {
     id: 'living-room-blockout',
     title: 'Interior Salon Blockout',
@@ -216,17 +239,34 @@ export const SAMPLE_3D_MODELS: Sample3DModel[] = [
   },
 ]
 
-export const QUICK_MATERIAL_TAGS = [
+export const SAMPLE_3D_MODELS: Sample3DModel[] = [
+  ...EXTERIOR_SAMPLE_MODELS,
+  ...INTERIOR_SAMPLE_MODELS,
+]
+
+export const EXTERIOR_MATERIAL_TAGS = [
   'Travertine stone facade',
   'Floor-to-ceiling low-iron glass',
   'Charred shou sugi ban cedar',
   'Board-formed architectural concrete',
-  'Warm 3000K recessed cove lighting',
   'Brushed bronze mullions',
-  'Herringbone French oak floor',
+  'Cantilevered roof overhang',
   'Infinity reflection pool with ripples',
   'Lush cascading monstera landscaping',
 ]
+
+export const INTERIOR_MATERIAL_TAGS = [
+  'Herringbone French oak floor',
+  'Honed Calacatta marble island',
+  'Fluted walnut wall panels',
+  'Warm 3000K recessed cove lighting',
+  'Custom bouclé sofa & brushed brass',
+  'Floor-to-ceiling sheer linen drapes',
+  'Smooth microcement plaster walls',
+  'Acoustic slatted timber ceiling',
+]
+
+export const QUICK_MATERIAL_TAGS = EXTERIOR_MATERIAL_TAGS
 
 export const PROJECT_TYPES: { value: ProjectType; label: string; description: string }[] = [
   { value: 'architecture', label: 'Architecture', description: 'Exteriors, facades, and site context' },

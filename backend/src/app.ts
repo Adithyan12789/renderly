@@ -7,6 +7,7 @@ import helmet from 'helmet'
 import { env } from './config/env.js'
 import { errorHandler, notFound } from './middleware/error-handler.js'
 import { apiRouter } from './routes/index.js'
+import { rendersRouter } from './routes/renders.routes.js'
 
 export function createApp() {
   const app = express()
@@ -54,6 +55,7 @@ export function createApp() {
     express.static(uploadsDir),
   )
 
+  app.use('/renders', rendersRouter)
   app.use('/api', apiRouter)
 
   app.use(notFound)

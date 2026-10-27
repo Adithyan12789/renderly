@@ -76,4 +76,16 @@ export const rendersService = {
     api
       .get<ApiSuccess<{ versions: Render[] }>>(`/renders/${renderId}/versions`)
       .then((r) => r.data.data.versions),
+
+  getDownloadUrl: (
+    renderId: string,
+    options?: { quality?: '1080p' | '2k' | '4k' | 'original'; format?: 'jpg' | 'png' },
+  ) => {
+    const params = new URLSearchParams()
+    if (options?.quality) params.set('quality', options.quality)
+    if (options?.format) params.set('format', options.format)
+    const rawBase = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+    const base = rawBase ? (rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`) : '/api'
+    return `${base}/renders/${renderId}/download?${params.toString()}`
+  },
 }

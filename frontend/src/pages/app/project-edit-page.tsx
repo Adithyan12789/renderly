@@ -5,7 +5,6 @@ import {
   Download,
   Image as ImageIcon,
   Loader2,
-  Maximize2,
   Plus,
   Save,
   Sparkles,
@@ -26,7 +25,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field, Input, Textarea } from '@/components/ui/field'
 import { getErrorMessage, resolveImageUrl } from '@/lib/api'
-import { ARCHITECTURAL_STYLES, PROJECT_TYPES } from '@/lib/site-content'
+import { PROJECT_TYPES } from '@/lib/site-content'
 import { cn } from '@/lib/utils'
 import { projectsService } from '@/services/projects'
 import { rendersService } from '@/services/renders'
@@ -204,11 +203,15 @@ export function ProjectEditPage() {
             </Button>
 
             <Link
-              to={`/app/renders?projectId=${project.id}`}
+              to={
+                project.type === 'interior'
+                  ? `/app/interior?projectId=${project.id}`
+                  : `/app/exterior?projectId=${project.id}`
+              }
               className={buttonVariants({ size: 'sm', className: 'gap-1.5 shadow-lg shadow-accent/20' })}
             >
               <Plus className="size-3.5" />
-              <span>Render New Scene</span>
+              <span>{project.type === 'interior' ? 'Render Interior' : 'Render Exterior'}</span>
             </Link>
           </div>
         </div>
@@ -310,13 +313,22 @@ export function ProjectEditPage() {
             </p>
           </div>
 
-          <Link
-            to={`/app/renders?projectId=${project.id}`}
-            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-1.5' })}
-          >
-            <Plus className="size-3.5" />
-            <span>Add View</span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/app/exterior?projectId=${project.id}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-1.5' })}
+            >
+              <Plus className="size-3.5" />
+              <span>Exterior View</span>
+            </Link>
+            <Link
+              to={`/app/interior?projectId=${project.id}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'gap-1.5' })}
+            >
+              <Plus className="size-3.5" />
+              <span>Interior View</span>
+            </Link>
+          </div>
         </div>
 
         {renders.length === 0 ? (
@@ -325,17 +337,21 @@ export function ProjectEditPage() {
             title="No scenes rendered yet"
             description="Upload your 3D model viewport capture or draft render to add the first scene to this project."
             action={
-              <Link to={`/app/renders?projectId=${project.id}`} className={buttonVariants()}>
-                <Sparkles className="size-4" />
-                Render First Scene
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Link to={`/app/exterior?projectId=${project.id}`} className={buttonVariants()}>
+                  <Sparkles className="size-4" />
+                  Render Exterior Scene
+                </Link>
+                <Link to={`/app/interior?projectId=${project.id}`} className={buttonVariants({ variant: 'outline' })}>
+                  <Sparkles className="size-4" />
+                  Render Interior Scene
+                </Link>
+              </div>
             }
           />
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {renders.map((render) => {
-              const matchedStyle = ARCHITECTURAL_STYLES.find((s) => s.value === render.style)
-
               return (
                 <article
                   key={render.id}
@@ -361,46 +377,14 @@ export function ProjectEditPage() {
                       />
                     )}
 
-                    {/* Gradient overlay */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
-
-                    {/* Top Badges */}
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 pointer-events-none z-10">
-                      <span className="rounded-full bg-black/70 px-2.5 py-0.5 text-[10px] font-semibold text-white/90 backdrop-blur-md uppercase">
-                        {render.engine || 'HyperReal'}
-                      </span>
-                      <span className="rounded-full bg-accent/80 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-md">
-                        {matchedStyle?.label || render.style}
-                      </span>
-                    </div>
-
-                    {/* Quick Studio & Maximize Action */}
-                    <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-                      <Link
-                        to={`/app/renders/${render.id}`}
-                        title="Open Render Studio & Edit Page"
-                        className="flex items-center gap-1 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-semibold text-white/95 backdrop-blur-md border border-white/15 hover:border-accent hover:bg-accent hover:text-background transition-all shadow-md cursor-pointer"
-                      >
-                        <Wand2 className="size-3 text-accent hover:text-inherit" />
-                        <span>Edit Scene</span>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setActiveLightboxRender(render)}
-                        title="View Fullscreen Comparison"
-                        className="grid size-7 place-items-center rounded-full bg-black/70 text-white/90 backdrop-blur-md hover:bg-white/20 transition-colors"
-                      >
-                        <Maximize2 className="size-3.5" />
-                      </button>
-                    </div>
                   </div>
 
-                  {/* Card Content & Vibe3D Toolbar */}
+                  {/* Card Content & Actions */}
                   <div className="flex flex-1 flex-col justify-between gap-3 p-4">
                     <div>
                       <Link
                         to={`/app/renders/${render.id}`}
-                        title={`Open edit page for: ${render.prompt}`}
+                        title={render.prompt}
                         className="line-clamp-2 text-sm font-medium text-foreground hover:text-accent transition-colors block"
                       >
                         {render.prompt}
@@ -420,24 +404,28 @@ export function ProjectEditPage() {
                         })}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
-                        <Vibe3dSceneToolbar
-                          render={render}
-                          variant="compact"
-                          onOpenEdit={() => setActiveEditRender(render)}
-                          onOpenRelight={() => setActiveRelightRender(render)}
-                          onOpenEnhance={() => setActiveEnhanceRender(render)}
-                          onOpenCloseups={() => setActiveCloseupsRender(render)}
-                          onOpenFlythrough={() => setActiveFlythroughRender(render)}
-                          onOpenCompare={() => setActiveLightboxRender(render)}
-                        />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const link = document.createElement('a')
+                            link.href = resolveImageUrl(render.imageUrl)
+                            link.download = `render-${render.id}.jpg`
+                            link.target = '_blank'
+                            link.click()
+                          }}
+                          title="Download render"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-border-strong hover:bg-surface hover:text-foreground"
+                        >
+                          <Download className="size-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setRenderToDelete(render)}
                           title="Delete scene"
-                          className="grid size-7 place-items-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 ml-1"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
                         >
-                          <Trash2 className="size-3.5" />
+                          <Trash2 className="size-4" />
                         </button>
                       </div>
                     </div>
@@ -476,8 +464,8 @@ export function ProjectEditPage() {
               </button>
             </div>
 
-            <div className="relative flex max-h-[64vh] items-center justify-center bg-black/50 p-6 overflow-y-auto">
-              <div className="w-full max-w-4xl">
+            <div className="relative flex max-h-[64vh] items-center justify-center bg-black/50 p-4 sm:p-6 overflow-y-auto">
+              <div className="flex items-center justify-center w-full max-w-4xl">
                 {activeLightboxRender.sourceImageUrl ? (
                   <BeforeAfterSlider
                     beforeSrc={activeLightboxRender.sourceImageUrl}
@@ -485,13 +473,20 @@ export function ProjectEditPage() {
                     beforeLabel="Original 3D Model"
                     afterLabel="Photo Real Render"
                     showControls={true}
-                    aspectClass="aspect-[16/9]"
+                    aspectClass={cn(
+                      "w-full max-h-[58vh]",
+                      activeLightboxRender.aspectRatio === '1:1' ? 'aspect-square' :
+                      activeLightboxRender.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+                      activeLightboxRender.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+                      'aspect-[16/9]'
+                    )}
+                    objectFit="contain"
                   />
                 ) : (
                   <img
                     src={resolveImageUrl(activeLightboxRender.imageUrl)}
                     alt={activeLightboxRender.prompt}
-                    className="max-h-[56vh] w-auto max-w-full mx-auto rounded-xl object-contain shadow-2xl"
+                    className="max-h-[58vh] w-auto max-w-full mx-auto rounded-xl object-contain shadow-2xl"
                   />
                 )}
               </div>

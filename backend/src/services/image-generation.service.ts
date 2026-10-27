@@ -57,6 +57,20 @@ const ENVIRONMENT_ENHANCERS: Record<string, string> = {
     'sleek metropolitan urban setting, clean architectural streetscape, polished wet pavement',
   zen:
     'private minimalist stone zen courtyard, raked gravel garden, sculptural Japanese maple',
+  desert:
+    'sculptural desert landscape, red rock formations, saguaro cacti, golden desert sand',
+  'interior-living':
+    'double-height luxury interior living room, bespoke designer furniture, floor-to-ceiling windows, high-end architectural interior photography',
+  'interior-kitchen':
+    'open-concept luxury chef kitchen and dining space, monolithic marble island, integrated minimalist cabinetry, designer barstools',
+  'interior-bedroom':
+    'serene luxury master bedroom suite, upholstered low-profile platform bed, natural linen bedding, architectural headboard wall, tranquil atmosphere',
+  'interior-bathroom':
+    'spa-like minimalist bathroom, freestanding soaking tub, natural stone slabs, brushed nickel fixtures, skylight illumination',
+  'interior-lounge':
+    'moody penthouse cocktail lounge, plush velvet seating, smoked bronze glass, ambient backlit wine display',
+  'interior-office':
+    'sunlit executive corner office, minimalist walnut desk, architectural shelving, expansive panoramic city vista',
 }
 
 // Stability AI SDXL supported exact dimensions
@@ -94,6 +108,7 @@ export interface GenerateImageFromModelOptions {
   geometryStrength?: number
   refinementPrompt?: string
   aspectRatio?: RenderAspectRatio
+  category?: 'exterior' | 'interior'
 }
 
 export interface GenerateImageOptions {
@@ -233,6 +248,7 @@ export class ImageGenerationService {
     lighting: RenderLighting
     environment?: string
     refinementPrompt?: string
+    category?: 'exterior' | 'interior'
   }): string {
     const styleDesc = STYLE_ENHANCERS[options.style] || STYLE_ENHANCERS['modern-luxury']
     const engineDesc = ENGINE_ENHANCERS[options.engine] || ENGINE_ENHANCERS.hyperreal
@@ -241,8 +257,14 @@ export class ImageGenerationService {
       ? ENVIRONMENT_ENHANCERS[options.environment]
       : ENVIRONMENT_ENHANCERS['landscaped-gardens']
 
+    const categoryDesc =
+      options.category === 'interior'
+        ? 'architectural interior photography, realistic luxury interior design, indoor space visualization, detailed materials and ambient indoor lighting'
+        : 'architectural exterior photography, building facade, outdoor massing and site environment'
+
     const parts = [
       engineDesc,
+      categoryDesc,
       styleDesc,
       lightingDesc,
       envDesc,
@@ -270,6 +292,7 @@ export class ImageGenerationService {
       environment = 'landscaped-gardens',
       geometryStrength = 0.42,
       refinementPrompt = '',
+      category = 'exterior',
     } = options
 
     const { rendersDir } = this.ensureDirs()
@@ -292,6 +315,7 @@ export class ImageGenerationService {
       lighting,
       environment,
       refinementPrompt,
+      category,
     })
 
     const fileName = `render-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`

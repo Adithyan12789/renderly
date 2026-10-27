@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { CinematicFlythroughModal } from '@/components/app/cinematic-flythrough-modal'
 import { CloseupsModal } from '@/components/app/closeups-modal'
+import { HdDownloadModal } from '@/components/app/hd-download-modal'
 import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { ImageMagnifier } from '@/components/app/image-magnifier'
 import { RelightModal } from '@/components/app/relight-modal'
@@ -84,6 +85,7 @@ export function RenderStudioPage() {
   const [isCloseupsOpen, setIsCloseupsOpen] = useState(false)
   const [isEnhanceOpen, setIsEnhanceOpen] = useState(false)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
+  const [isHdDownloadOpen, setIsHdDownloadOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -542,17 +544,14 @@ export function RenderStudioPage() {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            <a
-              href={resolveImageUrl(activeRender.imageUrl)}
-              download={`renderly-${activeRender.id}.jpg`}
-              target="_blank"
-              rel="noreferrer"
+            <Button
+              size="sm"
+              onClick={() => setIsHdDownloadOpen(true)}
+              className="gap-1.5 shadow-lg shadow-accent/20"
             >
-              <Button size="sm" className="gap-1.5 shadow-lg shadow-accent/20">
-                <Download className="size-3.5" />
-                <span>Download Master</span>
-              </Button>
-            </a>
+              <Download className="size-3.5" />
+              <span>Download HD Master</span>
+            </Button>
           </div>
         </div>
       </div>
@@ -836,6 +835,13 @@ export function RenderStudioPage() {
         isLoading={isDeleting}
         onConfirm={handleDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
+      />
+
+      {/* HD Download Quality Modal */}
+      <HdDownloadModal
+        isOpen={isHdDownloadOpen}
+        onClose={() => setIsHdDownloadOpen(false)}
+        render={activeRender}
       />
     </div>
   )

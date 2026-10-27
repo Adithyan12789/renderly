@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 import { AppLayout } from '@/layouts/app-layout'
 import { AuthLayout } from '@/layouts/auth-layout'
 import { MarketingLayout } from '@/layouts/marketing-layout'
@@ -43,11 +43,14 @@ export const router = createBrowserRouter([
       { path: 'projects/new', element: <NewProjectPage /> },
       { path: 'projects/:id', element: <ProjectEditPage /> },
       { path: 'projects/:id/edit', element: <ProjectEditPage /> },
-      { path: 'renders', element: <RendersPage /> },
+      { path: 'exterior', element: <RendersPage mode="exterior" /> },
+      { path: 'interior', element: <RendersPage mode="interior" /> },
+      { path: 'renders', element: <Navigate to="/app/exterior" replace /> },
       { path: 'renders/:id', element: <RenderStudioPage /> },
       { path: 'renders/:id/edit', element: <RenderStudioPage /> },
       { path: 'editor/:id', element: <RenderStudioPage /> },
       { path: 'walkthroughs', element: <WalkthroughsPage /> },
+      { path: 'walkthrough', element: <Navigate to="/app/walkthroughs" replace /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

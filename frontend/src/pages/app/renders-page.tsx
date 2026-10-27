@@ -2,9 +2,10 @@ import {
   Check,
   Download,
   Folder,
+  FolderPlus,
   Image as ImageIcon,
   Loader2,
-  Maximize2,
+  Plus,
   RefreshCw,
   Sliders,
   Sparkles,
@@ -13,10 +14,12 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { BeforeAfterSlider } from '@/components/app/before-after-slider'
 import { CinematicFlythroughModal } from '@/components/app/cinematic-flythrough-modal'
 import { CloseupsModal } from '@/components/app/closeups-modal'
+import { CreateProjectModal } from '@/components/app/create-project-modal'
+import { HdDownloadModal } from '@/components/app/hd-download-modal'
 import { HyperRealEnhanceModal } from '@/components/app/hyperreal-enhance-modal'
 import { PageHeader } from '@/components/app/page-header'
 import { RelightModal } from '@/components/app/relight-modal'
@@ -28,9 +31,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { getErrorMessage, resolveImageUrl } from '@/lib/api'
 import {
   ARCHITECTURAL_STYLES,
-  ENVIRONMENT_PRESETS,
+  EXTERIOR_ENVIRONMENT_PRESETS,
+  EXTERIOR_MATERIAL_TAGS,
+  EXTERIOR_SAMPLE_MODELS,
+  INTERIOR_ENVIRONMENT_PRESETS,
+  INTERIOR_LIGHTING_PRESETS,
+  INTERIOR_MATERIAL_TAGS,
+  INTERIOR_SAMPLE_MODELS,
   LIGHTING_PRESETS,
-  QUICK_MATERIAL_TAGS,
   RENDER_ENGINES,
   SAMPLE_3D_MODELS,
 } from '@/lib/site-content'
@@ -42,6 +50,7 @@ import type {
   Project,
   Render,
   RenderAspectRatio,
+  RenderCategory,
   RenderEngine,
   RenderLighting,
   RenderStyle,
@@ -54,12 +63,26 @@ const ASPECT_RATIOS: { value: RenderAspectRatio; label: string; aspectClass: str
   { value: '9:16', label: '9:16 Portrait', aspectClass: 'aspect-[9/16]' },
 ]
 
-export function RendersPage() {
+interface RendersPageProps {
+  mode?: RenderCategory
+}
+
+export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
+  const [searchParams] = useSearchParams()
+  const initialProjectId = searchParams.get('projectId')
+
+  const environmentPresets =
+    mode === 'interior' ? INTERIOR_ENVIRONMENT_PRESETS : EXTERIOR_ENVIRONMENT_PRESETS
+  const lightingPresets = mode === 'interior' ? INTERIOR_LIGHTING_PRESETS : LIGHTING_PRESETS
+  const sampleModels = mode === 'interior' ? INTERIOR_SAMPLE_MODELS : EXTERIOR_SAMPLE_MODELS
+  const materialTags = mode === 'interior' ? INTERIOR_MATERIAL_TAGS : EXTERIOR_MATERIAL_TAGS
+
   const [renders, setRenders] = useState<Render[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStep, setGenerationStep] = useState(0)
+  const [galleryFilter, setGalleryFilter] = useState<'category' | 'all'>('category')
 
   // Uploaded 3D Model / Source Image State
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
@@ -74,11 +97,14 @@ export function RendersPage() {
   const [selectedEngine, setSelectedEngine] = useState<RenderEngine>('hyperreal')
   const [selectedLighting, setSelectedLighting] = useState<RenderLighting>('golden-hour')
   const [selectedStyle, setSelectedStyle] = useState<RenderStyle>('modern-luxury')
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string>('landscaped-gardens')
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string>(
+    mode === 'interior' ? 'interior-living' : 'landscaped-gardens',
+  )
   const [geometryStrength, setGeometryStrength] = useState<number>(0.42)
   const [selectedAspect, setSelectedAspect] = useState<RenderAspectRatio>('16:9')
   const [refinementPrompt, setRefinementPrompt] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false)
   const [setAsThumbnail, setSetAsThumbnail] = useState<boolean>(false)
 
   // Modal / Lightbox State
@@ -88,6 +114,7 @@ export function RendersPage() {
   const [activeRelightRender, setActiveRelightRender] = useState<Render | null>(null)
   const [activeCloseupsRender, setActiveCloseupsRender] = useState<Render | null>(null)
   const [activeEnhanceRender, setActiveEnhanceRender] = useState<Render | null>(null)
+  const [downloadModalRender, setDownloadModalRender] = useState<Render | null>(null)
   const [renderToDelete, setRenderToDelete] = useState<Render | null>(null)
   const [isDeleting, setIsDeleting] = useState<boolean>(false)
 
@@ -99,6 +126,13 @@ export function RendersPage() {
         if (!mounted) return
         setRenders(rendersData || [])
         setProjects(projectsData || [])
+        if (projectsData && projectsData.length > 0) {
+          if (initialProjectId && projectsData.some((p) => p.id === initialProjectId)) {
+            setSelectedProjectId(initialProjectId)
+          } else {
+            setSelectedProjectId(projectsData[0].id)
+          }
+        }
       })
       .catch((err) => {
         console.error('Failed to load initial studio data:', err)
@@ -110,14 +144,15 @@ export function RendersPage() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [initialProjectId])
 
-  // Auto select first sample model if user has no image on first mount
+  // Reset environment and sample on mode change or mount
   useEffect(() => {
-    if (!uploadedImage && SAMPLE_3D_MODELS[0]) {
-      handleSelectSample(SAMPLE_3D_MODELS[0].id)
+    setSelectedEnvironment(mode === 'interior' ? 'interior-living' : 'landscaped-gardens')
+    if (sampleModels.length > 0) {
+      handleSelectSample(sampleModels[0].id)
     }
-  }, [])
+  }, [mode])
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith('image/')) {
@@ -173,7 +208,9 @@ export function RendersPage() {
   }
 
   function handleSelectSample(sampleId: string) {
-    const sample = SAMPLE_3D_MODELS.find((s) => s.id === sampleId)
+    const sample =
+      sampleModels.find((s) => s.id === sampleId) ||
+      SAMPLE_3D_MODELS.find((s) => s.id === sampleId)
     if (!sample) return
 
     setSelectedSampleId(sample.id)
@@ -198,12 +235,20 @@ export function RendersPage() {
     setRefinementPrompt((prev) => (prev ? `${prev}, ${tag}` : tag))
   }
 
-
   async function handleGenerate(e: FormEvent) {
     e.preventDefault()
 
     if (!uploadedImage) {
       toast.error('Please upload a 3D model viewport capture or select a sample model.')
+      return
+    }
+
+    if (!selectedProjectId) {
+      toast.error(
+        'A project is required to create a render. Please select or create a project first.',
+        'Project Required',
+      )
+      setIsCreateProjectOpen(true)
       return
     }
 
@@ -226,6 +271,7 @@ export function RendersPage() {
         refinementPrompt: refinementPrompt.trim() || undefined,
         projectId: selectedProjectId || null,
         setAsThumbnail,
+        category: mode,
       })
 
       clearTimeout(t1)
@@ -288,8 +334,12 @@ export function RendersPage() {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
-        title="AI Render Studio"
-        description="Upload 3D model viewport captures, white models, or clay screenshots and transform them into photorealistic architectural renders (Vibe3D engine)."
+        title={mode === 'interior' ? 'Interior Render Studio' : 'Exterior Render Studio'}
+        description={
+          mode === 'interior'
+            ? 'Transform interior room blockouts, floor views, and SketchUp/Blender white models into photorealistic interior designs with bespoke lighting, materials, and furnishings (Vibe3D engine).'
+            : 'Upload 3D model viewport captures, massing studies, and facade screenshots to transform them into photorealistic architectural exterior renders and landscaping (Vibe3D engine).'
+        }
       />
 
       {/* Main Studio Generator Panel */}
@@ -409,10 +459,12 @@ export function RendersPage() {
             {/* Quick Sample 3D Models Bar */}
             <div className="flex flex-col gap-2 pt-1">
               <span className="text-xs font-medium text-muted">
-                No 3D model right now? Try a curated viewport preset:
+                {mode === 'interior'
+                  ? 'No interior blockout right now? Try a curated room preset:'
+                  : 'No 3D model right now? Try a curated viewport preset:'}
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {SAMPLE_3D_MODELS.map((sample) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {sampleModels.map((sample) => {
                   const isSelected = selectedSampleId === sample.id
                   return (
                     <button
@@ -506,7 +558,7 @@ export function RendersPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
-              {LIGHTING_PRESETS.map((light) => {
+              {lightingPresets.map((light) => {
                 const isSelected = selectedLighting === light.value
                 return (
                   <button
@@ -570,14 +622,14 @@ export function RendersPage() {
             {/* Surroundings / Environment */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-foreground">
-                Surroundings & Landscape
+                {mode === 'interior' ? 'Room Space & Atmosphere' : 'Surroundings & Landscape'}
               </label>
               <select
                 value={selectedEnvironment}
                 onChange={(e) => setSelectedEnvironment(e.target.value)}
                 className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none"
               >
-                {ENVIRONMENT_PRESETS.map((env) => (
+                {environmentPresets.map((env) => (
                   <option key={env.value} value={env.value}>
                     {env.label} ({env.tagline})
                   </option>
@@ -641,38 +693,89 @@ export function RendersPage() {
               </div>
             </div>
 
-            {/* Link to Project */}
+            {/* Project Selection (Required) */}
             <div className="flex flex-col gap-2">
-              <label htmlFor="project-select" className="text-sm font-medium text-foreground">
-                Link to Project <span className="text-xs text-muted">(Optional)</span>
-              </label>
-              <div className="flex flex-col gap-2">
-                <select
-                  id="project-select"
-                  value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none"
+              <div className="flex items-center justify-between">
+                <label htmlFor="project-select" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Folder className="size-4 text-accent" />
+                  <span>Assigned Project</span>
+                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
+                    Required
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateProjectOpen(true)}
+                  className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
                 >
-                  <option value="">No project (Standalone render)</option>
-                  {projects.map((proj) => (
-                    <option key={proj.id} value={proj.id}>
-                      {proj.name} ({proj.type})
-                    </option>
-                  ))}
-                </select>
-
-                {selectedProjectId && (
-                  <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-muted">
-                    <input
-                      type="checkbox"
-                      checked={setAsThumbnail}
-                      onChange={(e) => setSetAsThumbnail(e.target.checked)}
-                      className="size-4 rounded border-border bg-background text-accent accent-accent"
-                    />
-                    <span>Set this render as the project cover thumbnail</span>
-                  </label>
-                )}
+                  <Plus className="size-3.5" />
+                  <span>New Project</span>
+                </button>
               </div>
+
+              {projects.length === 0 ? (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-accent/20 text-accent">
+                      <FolderPlus className="size-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">A project is required to create renders</p>
+                      <p className="text-[11px] text-muted">Create a project first to organize and synthesize your visualizations.</p>
+                    </div>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => setIsCreateProjectOpen(true)}>
+                    <Plus className="size-3.5" /> Create Project
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <select
+                      id="project-select"
+                      required
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className={cn(
+                        'h-10 w-full rounded-xl border bg-background px-3 text-sm text-foreground focus:border-accent focus:outline-none',
+                        !selectedProjectId ? 'border-accent ring-1 ring-accent/30' : 'border-border',
+                      )}
+                    >
+                      <option value="" disabled>
+                        — Select a project (Required) —
+                      </option>
+                      {projects.map((proj) => (
+                        <option key={proj.id} value={proj.id}>
+                          {proj.name} ({proj.type})
+                        </option>
+                      ))}
+                    </select>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCreateProjectOpen(true)}
+                      className="shrink-0 gap-1.5 h-10 px-3.5"
+                    >
+                      <Plus className="size-4" />
+                      <span className="hidden sm:inline">New Project</span>
+                    </Button>
+                  </div>
+
+                  {selectedProjectId && (
+                    <label className="flex cursor-pointer items-center gap-2 pt-1 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={setAsThumbnail}
+                        onChange={(e) => setSetAsThumbnail(e.target.checked)}
+                        className="size-4 rounded border-border bg-background text-accent accent-accent"
+                      />
+                      <span>Set this render as the project cover thumbnail</span>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -690,12 +793,16 @@ export function RendersPage() {
               rows={2}
               value={refinementPrompt}
               onChange={(e) => setRefinementPrompt(e.target.value)}
-              placeholder="e.g. Low-iron clear glass, honed travertine facade, charred shou sugi ban cedar, bronze mullions..."
+              placeholder={
+                mode === 'interior'
+                  ? 'e.g. French oak herringbone floor, honed Calacatta marble island, fluted walnut walls, warm 3000K recessed cove lighting...'
+                  : 'e.g. Low-iron clear glass, honed travertine facade, charred shou sugi ban cedar, bronze mullions...'
+              }
               className="w-full rounded-xl border border-border bg-background px-3.5 py-2 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
             />
 
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {QUICK_MATERIAL_TAGS.map((tag) => (
+              {materialTags.map((tag) => (
                 <button
                   key={tag}
                   type="button"
@@ -748,138 +855,142 @@ export function RendersPage() {
 
       {/* Renders Gallery Section */}
       <section className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-medium tracking-tight text-foreground">Render Gallery</h2>
-            <p className="text-xs text-muted">
-              {renders.length} {renders.length === 1 ? 'render' : 'renders'} synthesized and saved in database
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const categoryRenders = renders.filter((r) => {
+            if (mode === 'interior') {
+              return r.metadata?.category === 'interior'
+            } else {
+              return r.metadata?.category === 'exterior' || !r.metadata?.category
+            }
+          })
+          const displayedRenders = galleryFilter === 'category' ? categoryRenders : renders
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24 text-muted">
-            <Loader2 className="size-8 animate-spin" />
-          </div>
-        ) : renders.length === 0 ? (
-          <EmptyState
-            icon={ImageIcon}
-            title="No renders yet"
-            description="Upload a 3D model viewport capture or choose a preset model above to generate your first photorealistic visualization."
-          />
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {renders.map((render) => {
-              const matchedStyle = ARCHITECTURAL_STYLES.find((s) => s.value === render.style)
-              const matchedProject = projects.find((p) => p.id === render.projectId)
+          return (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-medium tracking-tight text-foreground">
+                    {mode === 'interior' ? 'Interior Render Gallery' : 'Exterior Render Gallery'}
+                  </h2>
+                  <p className="text-xs text-muted">
+                    {displayedRenders.length} {displayedRenders.length === 1 ? 'render' : 'renders'} in this view
+                  </p>
+                </div>
 
-              return (
-                <article
-                  key={render.id}
-                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-xl hover:shadow-black/30"
-                >
-                  {/* Before/After or Image Container */}
-                  <div className="relative aspect-[16/9] overflow-hidden bg-surface-raised">
-                    {render.sourceImageUrl ? (
-                      <BeforeAfterSlider
-                        beforeSrc={render.sourceImageUrl}
-                        afterSrc={render.imageUrl}
-                        beforeLabel="3D Model"
-                        afterLabel="Photo Real"
-                        showControls={false}
-                        aspectClass="aspect-[16/9]"
-                      />
-                    ) : (
-                      <img
-                        src={resolveImageUrl(render.imageUrl)}
-                        alt={render.prompt}
-                        className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        loading="lazy"
-                      />
+                <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setGalleryFilter('category')}
+                    className={cn(
+                      'rounded-lg px-3 py-1 font-medium transition-colors',
+                      galleryFilter === 'category'
+                        ? 'bg-surface text-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
                     )}
-
-                    {/* Gradient overlay for tags */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
-
-                    {/* Top Badges */}
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 pointer-events-none z-10">
-                      <span className="rounded-full bg-black/70 px-2.5 py-0.5 text-[10px] font-semibold text-white/90 backdrop-blur-md uppercase">
-                        {render.engine || 'HyperReal'}
-                      </span>
-                      <span className="rounded-full bg-accent/80 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-md">
-                        {matchedStyle?.label || render.style}
-                      </span>
-                    </div>
-
-                    {/* Quick Edit & Lightbox Action Icons */}
-                    <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-                      <Link
-                        to={`/app/renders/${render.id}`}
-                        title="Open Render Studio & Edit Page"
-                        className="flex items-center gap-1 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-semibold text-white/95 backdrop-blur-md border border-white/15 hover:border-accent hover:bg-accent hover:text-background transition-all shadow-md cursor-pointer"
-                      >
-                        <Sliders className="size-3 text-accent hover:text-inherit" />
-                        <span>Edit Scene</span>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setActiveLightboxRender(render)}
-                        title="View Fullscreen Comparison"
-                        className="grid size-7 place-items-center rounded-full bg-black/70 text-white/90 backdrop-blur-md hover:bg-white/20 transition-colors"
-                      >
-                        <Maximize2 className="size-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Project tag if attached - clicking redirects to project edit page */}
-                    {matchedProject ? (
-                      <Link
-                        to={`/app/projects/${matchedProject.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        title={`Open and edit project "${matchedProject.name}"`}
-                        className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-medium text-white/95 backdrop-blur-md border border-white/10 hover:border-accent hover:bg-accent hover:text-background transition-all shadow-md group/proj cursor-pointer"
-                      >
-                        <Folder className="size-3 text-accent group-hover/proj:text-background transition-colors" />
-                        <span className="truncate max-w-[150px]">{matchedProject.name}</span>
-                      </Link>
-                    ) : (
-                      <Link
-                        to={`/app/renders/${render.id}`}
-                        title="Open in Scene Studio"
-                        className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full bg-black/80 px-2.5 py-1 text-[11px] font-medium text-white/90 backdrop-blur-md border border-white/10 hover:border-accent hover:bg-accent hover:text-background transition-all shadow-md cursor-pointer"
-                      >
-                        <Sparkles className="size-3 text-accent" />
-                        <span>Scene Studio</span>
-                      </Link>
+                  >
+                    {mode === 'interior' ? 'Interior Only' : 'Exterior Only'} ({categoryRenders.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGalleryFilter('all')}
+                    className={cn(
+                      'rounded-lg px-3 py-1 font-medium transition-colors',
+                      galleryFilter === 'all'
+                        ? 'bg-surface text-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
                     )}
-                  </div>
+                  >
+                    All Renders ({renders.length})
+                  </button>
+                </div>
+              </div>
 
-                  {/* Details & Actions */}
-                  <div className="flex flex-1 flex-col justify-between gap-3 p-4">
-                    <div>
-                      {matchedProject && (
-                        <Link
-                          to={`/app/projects/${matchedProject.id}`}
-                          title={`Edit project ${matchedProject.name}`}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline mb-1"
-                        >
-                          <Folder className="size-3" />
-                          <span>{matchedProject.name}</span>
-                        </Link>
-                      )}
-                      <Link
-                        to={`/app/renders/${render.id}`}
-                        title={`Open edit page for: ${render.prompt}`}
-                        className="line-clamp-2 text-sm font-medium text-foreground hover:text-accent transition-colors block"
+              {isLoading ? (
+                <div className="flex items-center justify-center py-24 text-muted">
+                  <Loader2 className="size-8 animate-spin" />
+                </div>
+              ) : displayedRenders.length === 0 ? (
+                <EmptyState
+                  icon={ImageIcon}
+                  title={
+                    galleryFilter === 'category'
+                      ? mode === 'interior'
+                        ? 'No interior renders yet'
+                        : 'No exterior renders yet'
+                      : 'No renders yet'
+                  }
+                  description={
+                    mode === 'interior'
+                      ? 'Upload an interior room blockout or select a sample above to synthesize your first photorealistic interior scene.'
+                      : 'Upload a 3D model viewport capture or choose a preset model above to generate your first photorealistic exterior render.'
+                  }
+                />
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {displayedRenders.map((render) => {
+                    const matchedProject = projects.find((p) => p.id === render.projectId)
+
+                    return (
+                      <article
+                        key={render.id}
+                        className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-xl hover:shadow-black/30"
                       >
-                        {render.prompt}
-                      </Link>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
-                        <span className="capitalize">{render.lighting?.replace('-', ' ') || 'Golden hour'}</span>
-                        <span>·</span>
-                        <span>{(render.geometryStrength ? render.geometryStrength * 100 : 42).toFixed(0)}% adherence</span>
-                      </div>
-                    </div>
+                        {/* Before/After or Image Container */}
+                        <div className="relative aspect-[16/9] overflow-hidden bg-surface-raised">
+                          {render.sourceImageUrl ? (
+                            <BeforeAfterSlider
+                              beforeSrc={render.sourceImageUrl}
+                              afterSrc={render.imageUrl}
+                              beforeLabel="3D Model"
+                              afterLabel="Photo Real"
+                              showControls={false}
+                              aspectClass="aspect-[16/9]"
+                            />
+                          ) : (
+                            <img
+                              src={resolveImageUrl(render.imageUrl)}
+                              alt={render.prompt}
+                              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              loading="lazy"
+                            />
+                          )}
+                        </div>
+
+                        {/* Details & Actions */}
+                        <div className="flex flex-1 flex-col justify-between gap-3 p-4">
+                          <div>
+                            {matchedProject && (
+                              <Link
+                                to={`/app/projects/${matchedProject.id}`}
+                                title={`Edit project ${matchedProject.name}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline mb-1"
+                              >
+                                <Folder className="size-3" />
+                                <span>{matchedProject.name}</span>
+                              </Link>
+                            )}
+                            <Link
+                              to={`/app/renders/${render.id}`}
+                              title={render.prompt}
+                              className="line-clamp-2 text-sm font-medium text-foreground hover:text-accent transition-colors block"
+                            >
+                              {render.prompt}
+                            </Link>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
+                              {render.metadata?.category && (
+                                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent capitalize">
+                                  {render.metadata.category}
+                                </span>
+                              )}
+                              <span className="capitalize">
+                                {render.lighting?.replace('-', ' ') || 'Golden hour'}
+                              </span>
+                              <span>·</span>
+                              <span>
+                                {(render.geometryStrength ? render.geometryStrength * 100 : 42).toFixed(0)}% adherence
+                              </span>
+                            </div>
+                          </div>
 
                     <div className="flex items-center justify-between border-t border-border/50 pt-3">
                       <span className="text-[11px] text-muted">
@@ -891,24 +1002,22 @@ export function RendersPage() {
                         <span className="uppercase">{render.aspectRatio}</span>
                       </span>
 
-                      <div className="flex items-center gap-1.5">
-                        <Vibe3dSceneToolbar
-                          render={render}
-                          variant="compact"
-                          onOpenEdit={() => setActiveEditRender(render)}
-                          onOpenRelight={() => setActiveRelightRender(render)}
-                          onOpenEnhance={() => setActiveEnhanceRender(render)}
-                          onOpenCloseups={() => setActiveCloseupsRender(render)}
-                          onOpenFlythrough={() => setActiveFlythroughRender(render)}
-                          onOpenCompare={() => setActiveLightboxRender(render)}
-                        />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDownloadModalRender(render)}
+                          title="Download HD render (4K / 2K / 1080p)"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-accent hover:bg-accent/10 hover:text-accent"
+                        >
+                          <Download className="size-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setRenderToDelete(render)}
                           title="Delete render"
-                          className="grid size-7 place-items-center rounded-lg text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 ml-1"
+                          className="grid size-8 place-items-center rounded-lg border border-border bg-surface-raised text-muted transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
                         >
-                          <Trash2 className="size-3.5" />
+                          <Trash2 className="size-4" />
                         </button>
                       </div>
                     </div>
@@ -918,6 +1027,9 @@ export function RendersPage() {
             })}
           </div>
         )}
+            </>
+          )
+        })()}
       </section>
 
       {/* Lightbox Modal with Interactive Before & After Slider */}
@@ -958,8 +1070,8 @@ export function RendersPage() {
             </div>
 
             {/* Main Stage with Before/After Slider */}
-            <div className="relative flex max-h-[64vh] items-center justify-center bg-black/50 p-6 overflow-y-auto">
-              <div className="w-full max-w-4xl">
+            <div className="relative flex max-h-[64vh] items-center justify-center bg-black/50 p-4 sm:p-6 overflow-y-auto">
+              <div className="flex items-center justify-center w-full max-w-4xl">
                 {activeLightboxRender.sourceImageUrl ? (
                   <BeforeAfterSlider
                     beforeSrc={activeLightboxRender.sourceImageUrl}
@@ -967,13 +1079,20 @@ export function RendersPage() {
                     beforeLabel="Original 3D Model"
                     afterLabel="Photo Real Render"
                     showControls={true}
-                    aspectClass="aspect-[16/9]"
+                    aspectClass={cn(
+                      "w-full max-h-[58vh]",
+                      activeLightboxRender.aspectRatio === '1:1' ? 'aspect-square' :
+                      activeLightboxRender.aspectRatio === '4:3' ? 'aspect-[4/3]' :
+                      activeLightboxRender.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+                      'aspect-[16/9]'
+                    )}
+                    objectFit="contain"
                   />
                 ) : (
                   <img
                     src={resolveImageUrl(activeLightboxRender.imageUrl)}
                     alt={activeLightboxRender.prompt}
-                    className="max-h-[56vh] w-auto max-w-full mx-auto rounded-xl object-contain shadow-2xl"
+                    className="max-h-[58vh] w-auto max-w-full mx-auto rounded-xl object-contain shadow-2xl"
                   />
                 )}
               </div>
@@ -1060,17 +1179,14 @@ export function RendersPage() {
                       <Trash2 className="size-3.5" />
                       Delete
                     </Button>
-                    <a
-                      href={resolveImageUrl(activeLightboxRender.imageUrl)}
-                      download={`renderly-render-${activeLightboxRender.id}.jpg`}
-                      target="_blank"
-                      rel="noreferrer"
+                    <Button
+                      size="sm"
+                      onClick={() => setDownloadModalRender(activeLightboxRender)}
+                      className="gap-1.5 shadow-md shadow-accent/20"
                     >
-                      <Button size="sm">
-                        <Download className="size-3.5" />
-                        Download
-                      </Button>
-                    </a>
+                      <Download className="size-3.5" />
+                      <span>Download HD</span>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1150,6 +1266,24 @@ export function RendersPage() {
         isLoading={isDeleting}
         onConfirm={handleDeleteRender}
         onClose={() => setRenderToDelete(null)}
+      />
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateProjectOpen}
+        onClose={() => setIsCreateProjectOpen(false)}
+        onSuccess={(newProj) => {
+          setProjects((prev) => [newProj, ...prev])
+          setSelectedProjectId(newProj.id)
+        }}
+        title="Create Project for Render"
+        description="All synthesized renders must belong to a project for organization and client presentations."
+      />
+
+      {/* HD Download Quality Modal */}
+      <HdDownloadModal
+        isOpen={Boolean(downloadModalRender)}
+        onClose={() => setDownloadModalRender(null)}
+        render={downloadModalRender}
       />
     </div>
   )

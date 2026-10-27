@@ -40,6 +40,8 @@ export type RenderVersionType =
   | 'closeup'
   | 'flythrough'
 
+export type RenderCategory = 'exterior' | 'interior'
+
 export interface Render {
   id: string
   userId: string
@@ -59,7 +61,10 @@ export interface Render {
   imageUrl: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   provider: string
-  metadata?: Record<string, unknown>
+  metadata?: {
+    category?: RenderCategory
+    [key: string]: unknown
+  }
   createdAt: string
   updatedAt: string
 }
@@ -94,6 +99,7 @@ export interface GenerateRenderPayload {
   aspectRatio?: RenderAspectRatio
   projectId?: string | null
   setAsThumbnail?: boolean
+  category?: RenderCategory
 }
 
 export interface ApiSuccess<T> {
