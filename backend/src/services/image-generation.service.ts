@@ -621,12 +621,17 @@ export class ImageGenerationService {
       // 3A. Primary SOTA Method: Stability AI Structure ControlNet (v2beta)
       // This is the gold standard for architectural rendering: extracts edge/depth geometry from 3D models while synthesizing 100% realistic materials
       try {
-        const controlStrength = renderingMode === 'preserve-structure' ? '0.85' : renderingMode === 'realistic-enhancement' ? '0.70' : '0.55'
+        const controlStrength = renderingMode === 'preserve-structure'
+          ? String(Math.max(0.70, Math.min(0.82, (geometryStrength || 0.85) * 0.88)))
+          : renderingMode === 'realistic-enhancement'
+            ? '0.65'
+            : '0.50'
         console.log(`[ImageGen] Invoking Stability AI ControlNet Structure API (control_strength: ${controlStrength})...`)
 
         const structureFormData = new FormData()
         structureFormData.append('image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'structure.jpg')
-        structureFormData.append('prompt', `${category === 'exterior' ? 'Master architectural exterior photograph' : 'Master luxury architectural interior photograph'}, ${enhancedPrompt}`.slice(0, 2000))
+        structureFormData.append('prompt', `${category === 'exterior' ? 'Master architectural exterior photograph' : 'Master luxury architectural interior photograph'}, ${enhancedPrompt}`.slice(0, 4000))
+        structureFormData.append('negative_prompt', negativeConstraints.slice(0, 4000))
         structureFormData.append('control_strength', controlStrength)
         structureFormData.append('output_format', 'jpeg')
 
