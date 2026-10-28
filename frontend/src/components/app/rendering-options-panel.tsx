@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Camera,
   Check,
   ChevronDown,
@@ -58,6 +59,9 @@ interface RenderingOptionsPanelProps {
   onLocationImageSelect: (file: File) => void
   onLocationImageClear: () => void
   livePrompt: string
+  liveWarnings?: string[]
+  quality?: 'standard' | 'high' | 'ultra'
+  onQualityChange?: (quality: 'standard' | 'high' | 'ultra') => void
 }
 
 export function RenderingOptionsPanel({
@@ -73,6 +77,9 @@ export function RenderingOptionsPanel({
   onLocationImageSelect,
   onLocationImageClear,
   livePrompt,
+  liveWarnings,
+  quality = 'high',
+  onQualityChange,
 }: RenderingOptionsPanelProps) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     siteRef: false,
@@ -1392,7 +1399,76 @@ export function RenderingOptionsPanel({
         </div>
 
         {!collapsedSections.promptPreview && (
-          <div className="p-4 flex flex-col gap-2">
+          <div className="p-4 flex flex-col gap-3">
+            {/* Quality Tier Selector */}
+            {onQualityChange && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-xl bg-surface/80 p-2.5 border border-border/40">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-foreground">Rendering Quality Output</span>
+                  <span className="text-[11px] text-muted">
+                    {quality === 'ultra'
+                      ? 'Ultra 4K Master: Prompt-guided neural detail upscaler'
+                      : quality === 'high'
+                        ? 'High Quality: 4x neural texture & edge enhancement'
+                        : 'Standard Preview: Native resolution (~1MP), fast output'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/60">
+                  <button
+                    type="button"
+                    onClick={() => onQualityChange('standard')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      quality === 'standard'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    Standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onQualityChange('high')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      quality === 'high'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    High Quality
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onQualityChange('ultra')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      quality === 'ultra'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    Ultra 4K
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Live Conflict & Priority Warnings */}
+            {liveWarnings && liveWarnings.length > 0 && (
+              <div className="flex flex-col gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                  <AlertTriangle className="size-3.5 text-amber-400 shrink-0" />
+                  <span>Option Priority & Conflict Adjustments ({liveWarnings.length})</span>
+                </div>
+                <ul className="flex flex-col gap-1 pl-5 list-disc text-[11px] text-amber-200/90 leading-relaxed">
+                  {liveWarnings.map((warn, i) => (
+                    <li key={i}>{warn}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <p className="text-xs text-foreground/90 font-mono leading-relaxed bg-black/40 p-3 rounded-xl border border-border/50 whitespace-pre-wrap select-all max-h-36 overflow-y-auto">
               {livePrompt}
             </p>

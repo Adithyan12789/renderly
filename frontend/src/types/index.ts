@@ -154,6 +154,12 @@ export interface Render {
   provider: string
   metadata?: {
     category?: RenderCategory
+    quality?: { requested: 'standard' | 'high' | 'ultra'; applied: 'standard' | 'high' | 'ultra' }
+    warnings?: string[]
+    audit?: Array<{ option: string; value: string; status: string; detail: string }>
+    effectiveSettings?: Record<string, unknown>
+    negativePrompt?: string
+    providerRequest?: Record<string, unknown>
     exteriorSettings?: ExteriorRenderingSettings
     interiorSettings?: InteriorRenderingSettings
     [key: string]: unknown
@@ -189,6 +195,7 @@ export interface GenerateRenderPayload {
   engine?: RenderEngine
   lighting?: RenderLighting
   renderingMode?: RenderingMode
+  quality?: 'standard' | 'high' | 'ultra'
   environment?: string
   geometryStrength?: number
   aspectRatio?: RenderAspectRatio

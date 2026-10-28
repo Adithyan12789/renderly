@@ -7,11 +7,12 @@ import { type AuthenticatedRequest, requireAuth } from '../middleware/auth.js'
 import { ProjectModel } from '../models/project.model.js'
 import { RenderModel, type RenderAspectRatio } from '../models/render.model.js'
 import { UserModel } from '../models/user.model.js'
-import { ImageGenerationService } from '../services/image-generation.service.js'
+import { ImageGenerationService, type GenerateImageResult } from '../services/image-generation.service.js'
 import { HttpError } from '../utils/http-error.js'
 import { sendSuccess } from '../utils/respond.js'
 
 import { validateRenderingSettings } from '../utils/prompt-builder.js'
+import { resolveRendering } from '../utils/render-settings.js'
 
 export const rendersRouter = Router()
 
@@ -41,6 +42,7 @@ const generateRenderSchema = z
     environment: z.string().trim().default('landscaped-gardens'),
     geometryStrength: z.coerce.number().min(0.1).max(1.0).default(0.85),
     aspectRatio: z.enum(['16:9', '4:3', '1:1', '9:16']).optional(),
+    quality: z.enum(['standard', 'high', 'ultra']).default('standard'),
     projectId: z.string().trim().optional().nullable(),
     setAsThumbnail: z.boolean().default(false),
     category: z.enum(['exterior', 'interior']).default('exterior'),
@@ -51,6 +53,33 @@ const generateRenderSchema = z
   .refine((data) => Boolean(data.image || data.prompt), {
     message: 'Please upload an image (3D model screenshot / photo) or enter an architectural description.',
   })
+
+// Preview: runs the exact same resolver as real generation (prompt, negative prompt, warnings, audit)
+rendersRouter.post('/preview', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = z
+      .object({
+        category: z.enum(['exterior', 'interior']).default('exterior'),
+        renderingMode: z.enum(['preserve-structure', 'realistic-enhancement', 'creative-redesign']).default('preserve-structure'),
+        quality: z.enum(['standard', 'high', 'ultra']).default('standard'),
+        refinementPrompt: z.string().trim().max(4000).optional(),
+        exteriorSettings: z.record(z.string(), z.unknown()).optional(),
+        interiorSettings: z.record(z.string(), z.unknown()).optional(),
+      })
+      .parse(req.body)
+    const effective = resolveRendering({
+      category: payload.category,
+      renderingMode: payload.renderingMode,
+      quality: payload.quality,
+      refinementPrompt: payload.refinementPrompt,
+      exteriorSettings: payload.exteriorSettings as any,
+      interiorSettings: payload.interiorSettings as any,
+    })
+    return sendSuccess(res, { preview: effective })
+  } catch (error) {
+    next(error)
+  }
+})
 
 // List user renders
 rendersRouter.get('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
@@ -260,14 +289,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       }
     }
 
-    let genResult: {
-      imageUrl: string
-      sourceImageUrl?: string | null
-      locationImageUrl?: string | null
-      enhancedPrompt: string
-      provider: string
-      aspectRatio?: RenderAspectRatio
-    }
+    let genResult: GenerateImageResult
 
     let finalPrompt = payload.prompt?.trim() || ''
 
@@ -291,6 +313,7 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
         geometryStrength: payload.geometryStrength,
         refinementPrompt: payload.refinementPrompt || payload.prompt,
         aspectRatio: payload.aspectRatio,
+        quality: payload.quality,
         category: payload.category,
         exteriorSettings: payload.exteriorSettings as any,
         interiorSettings: payload.interiorSettings as any,
@@ -340,6 +363,12 @@ rendersRouter.post('/generate', requireAuth, async (req: AuthenticatedRequest, r
       metadata: {
         ...(payload.metadata || {}),
         category: payload.category || 'exterior',
+        quality: genResult.quality || { requested: payload.quality, applied: 'standard' },
+        ...(genResult.warnings ? { warnings: genResult.warnings } : {}),
+        ...(genResult.audit ? { audit: genResult.audit } : {}),
+        ...(genResult.effectiveSettings ? { effectiveSettings: genResult.effectiveSettings } : {}),
+        ...(genResult.negativePrompt ? { negativePrompt: genResult.negativePrompt } : {}),
+        ...(genResult.providerRequest ? { providerRequest: genResult.providerRequest } : {}),
         ...(payload.exteriorSettings ? { exteriorSettings: payload.exteriorSettings } : {}),
         ...(payload.interiorSettings ? { interiorSettings: payload.interiorSettings } : {}),
       },

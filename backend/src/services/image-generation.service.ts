@@ -11,6 +11,8 @@ import {
   type ExteriorSettings,
   type InteriorSettings,
 } from '../utils/prompt-builder.js'
+import { HttpError } from '../utils/http-error.js'
+import { resolveRendering, type AuditEntry, type RenderQuality } from '../utils/render-settings.js'
 
 const STYLE_ENHANCERS: Record<RenderStyle, string> = {
   'modern-luxury':
@@ -120,6 +122,7 @@ export interface GenerateImageFromModelOptions {
   refinementPrompt?: string
   aspectRatio?: RenderAspectRatio
   category?: 'exterior' | 'interior'
+  quality?: RenderQuality
   exteriorSettings?: ExteriorSettings
   interiorSettings?: InteriorSettings
 }
@@ -137,6 +140,15 @@ export interface GenerateImageResult {
   enhancedPrompt: string
   provider: string
   aspectRatio?: RenderAspectRatio
+  /** Conflicts, unsupported settings and provider problems the user should know about. */
+  warnings?: string[]
+  /** Per-option mapping: prompt, provider parameter, negative prompt, or documented exclusion. */
+  audit?: AuditEntry[]
+  effectiveSettings?: Record<string, unknown>
+  negativePrompt?: string
+  quality?: { requested: RenderQuality; applied: RenderQuality }
+  /** What was actually sent to the provider (endpoint and numeric parameters). */
+  providerRequest?: Record<string, unknown>
 }
 
 export class ImageGenerationService {
@@ -572,16 +584,20 @@ export class ImageGenerationService {
       }
     }
 
-    // Map lighting from exteriorSettings.timeOfDay if specified
-    let effectiveLighting = lighting
-    if (category === 'exterior' && options.exteriorSettings?.timeOfDay) {
-      const tod = options.exteriorSettings.timeOfDay.toLowerCase()
-      if (tod.includes('dusk') || tod.includes('blue hour')) effectiveLighting = 'dusk'
-      else if (tod.includes('night')) effectiveLighting = 'night'
-      else if (tod.includes('sunset') || tod.includes('golden hour')) effectiveLighting = 'golden-hour'
-      else if (tod.includes('overcast')) effectiveLighting = 'overcast'
-      else if (tod.includes('midday') || tod.includes('dawn')) effectiveLighting = 'daylight'
-    }
+    // Single effective configuration: validated, conflict-resolved, shared with the preview endpoint.
+    const quality: RenderQuality = options.quality || 'standard'
+    const effective = resolveRendering({
+      category,
+      exteriorSettings: options.exteriorSettings,
+      interiorSettings: options.interiorSettings,
+      renderingMode,
+      quality,
+      fallbackLighting: lighting,
+      refinementPrompt,
+    })
+    const effectiveLighting = effective.lighting
+    const warnings: string[] = [...effective.warnings]
+    const audit = [...effective.audit]
 
     // 2. Prepare high-quality resized buffer maintaining crisp resolution
     const preparedInitBuffer = await sharp(rawSourceBuffer)
@@ -592,12 +608,9 @@ export class ImageGenerationService {
     let enhancedPrompt = ''
     let negativeConstraints = ''
 
-    if (category === 'exterior' && options.exteriorSettings) {
-      enhancedPrompt = buildExteriorPrompt(options.exteriorSettings, refinementPrompt)
-      negativeConstraints = buildNegativePrompt('exterior', options.exteriorSettings)
-    } else if (category === 'interior' && options.interiorSettings) {
-      enhancedPrompt = buildInteriorPrompt(options.interiorSettings, refinementPrompt)
-      negativeConstraints = buildNegativePrompt('interior', options.interiorSettings)
+    if ((category === 'exterior' && options.exteriorSettings) || (category === 'interior' && options.interiorSettings)) {
+      enhancedPrompt = effective.prompt
+      negativeConstraints = effective.negativePrompt
     } else {
       enhancedPrompt = this.buildRealismPrompt({
         style,
@@ -612,28 +625,103 @@ export class ImageGenerationService {
         : 'altering room layout, moving walls, moving windows, changing doors, warped ceiling, distorted perspective, extra furniture in pathways, blurry, cartoon, wireframe, clay render, low quality, noise'
     }
 
+    let providerRequest: Record<string, unknown> = {}
+    const buildExtras = (applied: RenderQuality, extra: Record<string, unknown> = {}) => ({
+      warnings,
+      audit,
+      effectiveSettings: effective.settings as Record<string, unknown>,
+      negativePrompt: negativeConstraints,
+      quality: { requested: quality, applied },
+      providerRequest: { ...providerRequest, ...extra },
+    })
+
     const fileName = `render-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
     // 3. Cloud Neural Synthesis: Stability AI Structure ControlNet / SDXL Image-to-Image
+    const providerFailures: string[] = []
+    if (!env.STABILITY_API_KEY) {
+      providerFailures.push('No STABILITY_API_KEY is configured')
+    }
     if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
       // 3A. Primary SOTA Method: Stability AI Structure ControlNet (v2beta)
       // This is the gold standard for architectural rendering: extracts edge/depth geometry from 3D models while synthesizing 100% realistic materials
+      const describeFailure = (label: string, status: number, body: string): string => {
+        if (status === 402 || status === 429) {
+          return `${label}: Stability AI account has insufficient credits (HTTP ${status}). Add credits at https://platform.stability.ai/dashboard/billing`
+        }
+        return `${label}: HTTP ${status} ${body.slice(0, 200)}`
+      }
+
+      /**
+       * Quality tiers map to real Stability upscale endpoints:
+       *   standard -> native structure output (about 1 megapixel, no upscale)
+       *   high     -> upscale/fast (neural 4x upscaler)
+       *   ultra    -> upscale/conservative (prompt-guided detail-preserving upscale, up to 4K)
+       * If an upscale step fails the native render is returned and a warning is recorded.
+       */
+      const applyQuality = async (aiBuffer: Buffer): Promise<{ buffer: Buffer; applied: RenderQuality }> => {
+        if (quality === 'standard') return { buffer: aiBuffer, applied: 'standard' }
+        const isUltra = quality === 'ultra'
+        const endpoint = isUltra
+          ? 'https://api.stability.ai/v2beta/stable-image/upscale/conservative'
+          : 'https://api.stability.ai/v2beta/stable-image/upscale/fast'
+        try {
+          const form = new FormData()
+          form.append('image', new Blob([aiBuffer], { type: 'image/jpeg' }), 'render.jpg')
+          form.append('output_format', 'jpeg')
+          if (isUltra) {
+            form.append('prompt', enhancedPrompt.slice(0, 4000))
+            form.append('negative_prompt', negativeConstraints.slice(0, 4000))
+            form.append('creativity', '0.25')
+          }
+          const upRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STABILITY_API_KEY}`, Accept: 'image/*' },
+            body: form,
+          })
+          if (upRes.ok) {
+            const upBuf = Buffer.from(await upRes.arrayBuffer())
+            if (upBuf.length > 5000) {
+              providerRequest = { ...providerRequest, upscaleEndpoint: endpoint.split('/v2beta/')[1] }
+              return { buffer: upBuf, applied: quality }
+            }
+          }
+          const body = upRes.ok ? 'empty response' : await upRes.text()
+          warnings.push(`${quality} quality upscale was not applied. ${describeFailure('Upscale', upRes.status, body)}. The native-resolution render is shown instead.`)
+        } catch (upErr) {
+          warnings.push(`${quality} quality upscale failed (${(upErr as Error).message}). The native-resolution render is shown instead.`)
+        }
+        return { buffer: aiBuffer, applied: 'standard' }
+      }
+
       try {
+        // control_strength: higher = the output follows the reference structure more strictly.
         const controlStrength = renderingMode === 'preserve-structure'
           ? String(Math.max(0.70, Math.min(0.82, (geometryStrength || 0.85) * 0.88)))
           : renderingMode === 'realistic-enhancement'
             ? '0.65'
             : '0.50'
-        console.log(`[ImageGen] Invoking Stability AI ControlNet Structure API (control_strength: ${controlStrength})...`)
+        console.log(`[ImageGen] Invoking Stability AI ControlNet Structure API (control_strength: ${controlStrength}, quality: ${quality})...`)
 
+        const structurePrompt = enhancedPrompt.slice(0, 4000)
         const structureFormData = new FormData()
         structureFormData.append('image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'structure.jpg')
-        structureFormData.append('prompt', `${category === 'exterior' ? 'Master architectural exterior photograph' : 'Master luxury architectural interior photograph'}, ${enhancedPrompt}`.slice(0, 4000))
+        structureFormData.append('prompt', structurePrompt)
         structureFormData.append('negative_prompt', negativeConstraints.slice(0, 4000))
         structureFormData.append('control_strength', controlStrength)
         structureFormData.append('output_format', 'jpeg')
+
+        providerRequest = {
+          provider: 'stability-ai',
+          endpoint: 'v2beta/stable-image/control/structure',
+          imageSent: true,
+          control_strength: Number(controlStrength),
+          promptSent: true,
+          negativePromptSent: true,
+          inputSize: `${targetWidth}x${targetHeight}`,
+        }
 
         const structRes = await fetch('https://api.stability.ai/v2beta/stable-image/control/structure', {
           method: 'POST',
@@ -647,9 +735,9 @@ export class ImageGenerationService {
         if (structRes.ok) {
           const rawBuffer = Buffer.from(await structRes.arrayBuffer())
           if (rawBuffer.length > 5000) {
-            const optimized = await sharp(rawBuffer)
-              .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-              .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
+            const upscaled = await applyQuality(rawBuffer)
+            const optimized = await sharp(upscaled.buffer)
+              .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
               .toBuffer()
             fs.writeFileSync(filePath, optimized)
             console.log(`[ImageGen] Stability AI Structure synthesis complete! Saved ${relativeUrl}`)
@@ -660,49 +748,48 @@ export class ImageGenerationService {
               enhancedPrompt,
               provider: `stability-structure-${renderingMode}`,
               aspectRatio: targetAspect,
+              ...buildExtras(upscaled.applied),
             }
           }
+          providerFailures.push('Structure ControlNet returned an empty image')
         } else {
           const errText = await structRes.text()
           console.warn('[ImageGen] Stability AI Structure API response error:', structRes.status, errText)
-          if (structRes.status === 402 || structRes.status === 429) {
-            console.warn('[ImageGen] Stability AI API account has insufficient credits ($0.0022 balance vs $0.009+ required). Please purchase credits at https://platform.stability.ai/dashboard/billing.')
-          }
+          providerFailures.push(describeFailure('Structure ControlNet', structRes.status, errText))
         }
       } catch (structErr) {
         console.warn('[ImageGen] Stability Structure endpoint skipped/failed:', structErr)
+        providerFailures.push(`Structure ControlNet failed: ${(structErr as Error).message}`)
       }
+
 
       // 3B. Secondary Method: SDXL Image-to-Image with calibrated preservation strength
       // Note: In Stability SDXL API, image_strength represents PRESERVATION STRENGTH (1.0 = keep original, 0.0 = replace).
       // For untextured 3D models/blockouts, a value of 0.58-0.62 preserves building envelope and perspective while providing 40% denoising latitude to synthesize PBR materials.
       try {
-        let effectiveStrength = 0.38
-        let cfgScale = '8.5'
+        let effectiveStrength = 0.60
+        let cfgScale = '8.0'
 
         if (renderingMode === 'preserve-structure') {
-          // 0.38 - 0.42 preservation: retains architectural massing and floor alignments while replacing CAD line drawings with real photographic materials
-          effectiveStrength = Math.max(0.35, Math.min(0.44, (geometryStrength || 0.85) * 0.46))
+          // 0.60 preservation: locks floor count, openings, and roofline while converting clay/wireframe into physical finishes
+          effectiveStrength = Math.max(0.55, Math.min(0.68, (geometryStrength || 0.85) * 0.72))
           cfgScale = '8.5'
         } else if (renderingMode === 'realistic-enhancement') {
-          effectiveStrength = 0.32
-          cfgScale = '8.0'
-        } else if (renderingMode === 'creative-redesign') {
-          effectiveStrength = 0.25
+          effectiveStrength = 0.50
           cfgScale = '7.5'
+        } else if (renderingMode === 'creative-redesign') {
+          effectiveStrength = 0.38
+          cfgScale = '7.0'
         }
 
         console.log(`[ImageGen] Transforming architectural model with Stability AI SDXL img2img (${renderingMode}, calibrated preservation strength: ${effectiveStrength.toFixed(2)})...`)
 
-        const structuredPrompt = category === 'exterior'
-          ? `Master architectural photography strictly preserving the exact building geometry, silhouette, floor heights, window and door placements, and camera angle of the uploaded reference model. Render with photorealistic ${style} materials, realistic PBR surface textures, physical glass reflections, ${effectiveLighting} atmospheric illumination, architectural photography, 8k resolution, ArchDaily quality, sharp focus.`
-          : `Master architectural interior photography strictly preserving the exact room layout, wall boundaries, window and door openings, ceiling height, and camera perspective of the uploaded reference image. Render with luxurious ${style} finishes, realistic floor materials, natural indoor global illumination, ${effectiveLighting} lighting mood, architectural interior photography, 8k resolution, sharp focus.`
-
+        // SDXL v1 accepts ~2000 chars of prompt; use the same resolved prompt (no hidden style defaults).
         const formData = new FormData()
         formData.append('init_image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'init.jpg')
         formData.append('init_image_mode', 'IMAGE_STRENGTH')
         formData.append('image_strength', String(effectiveStrength))
-        formData.append('text_prompts[0][text]', `${structuredPrompt} ${enhancedPrompt}`.slice(0, 2000))
+        formData.append('text_prompts[0][text]', enhancedPrompt.slice(0, 2000))
         formData.append('text_prompts[0][weight]', '1')
         formData.append('text_prompts[1][text]', negativeConstraints)
         formData.append('text_prompts[1][weight]', '-1')
@@ -726,10 +813,19 @@ export class ImageGenerationService {
           const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
           const b64 = data?.artifacts?.[0]?.base64
           if (b64) {
-            const rawBuffer = Buffer.from(b64, 'base64')
-            const optimized = await sharp(rawBuffer)
-              .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-              .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
+            providerRequest = {
+              provider: 'stability-ai',
+              endpoint: 'v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
+              imageSent: true,
+              image_strength: effectiveStrength,
+              cfg_scale: Number(cfgScale),
+              promptSent: true,
+              negativePromptSent: true,
+            }
+            warnings.push(`Structure ControlNet was unavailable (${providerFailures.join('; ')}). SDXL image-to-image was used instead; it follows the original geometry less precisely.`)
+            const upscaled = await applyQuality(Buffer.from(b64, 'base64'))
+            const optimized = await sharp(upscaled.buffer)
+              .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
               .toBuffer()
             fs.writeFileSync(filePath, optimized)
             console.log(`[ImageGen] Stability AI SDXL synthesis complete! Saved ${relativeUrl}`)
@@ -740,16 +836,32 @@ export class ImageGenerationService {
               enhancedPrompt,
               provider: `stability-sdxl-${renderingMode}`,
               aspectRatio: targetAspect,
+              ...buildExtras(upscaled.applied),
             }
           }
+          providerFailures.push('SDXL image-to-image returned no image')
         } else {
           const errText = await response.text()
           console.warn('[ImageGen] Stability AI SDXL API response error:', response.status, errText)
+          providerFailures.push(describeFailure('SDXL image-to-image', response.status, errText))
         }
       } catch (err) {
-        console.error('[ImageGen] Stability AI image-to-image failed, falling back to local structural rendering pipeline:', err)
+        console.error('[ImageGen] Stability AI image-to-image failed:', err)
+        providerFailures.push(`SDXL image-to-image failed: ${(err as Error).message}`)
       }
     }
+
+    // 3C. No AI render was produced. Do NOT silently hand back a fake "render".
+    if (process.env.AI_ALLOW_LOCAL_FALLBACK !== 'true') {
+      const reason = providerFailures.length ? providerFailures.join(' | ') : 'AI provider is disabled (AI_IMAGE_PROVIDER)'
+      throw new HttpError(
+        503,
+        `AI rendering is currently unavailable, so no render was created. ${reason}`,
+        'AI_PROVIDER_UNAVAILABLE',
+      )
+    }
+    warnings.push(`AI rendering failed (${providerFailures.join('; ')}). This is a basic non-AI colour/lighting adjustment, NOT a photorealistic render.`)
+    providerRequest = { provider: 'local-fallback', imageSent: false, note: 'No neural model was used' }
 
     // 4. Vibe3D Structural Architecture Neural Engine (Guarantees 100% Geometric Match & Zero Hallucinations)
     try {
@@ -871,6 +983,7 @@ export class ImageGenerationService {
         enhancedPrompt,
         provider: `vibe3d-structural-${renderingMode}`,
         aspectRatio: targetAspect,
+        ...buildExtras('standard'),
       }
     } catch (err) {
       console.error('[ImageGen] Structural rendering failed, saving optimized source as fallback:', err)
@@ -886,6 +999,7 @@ export class ImageGenerationService {
         enhancedPrompt,
         provider: 'renderly-source-preserved',
         aspectRatio: targetAspect,
+        ...buildExtras('standard'),
       }
     }
   }

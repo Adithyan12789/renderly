@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getErrorMessage, resolveImageUrl } from '@/lib/api'
-import { buildExteriorPrompt, buildInteriorPrompt } from '@/lib/prompt-builder'
+import { resolveRendering } from '@/lib/render-settings'
 import {
   EXTERIOR_MATERIAL_TAGS,
   INTERIOR_MATERIAL_TAGS,
@@ -80,6 +80,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
     mode === 'interior' ? 'interior-living' : 'landscaped-gardens',
   )
   const [geometryStrength] = useState<number>(0.85)
+  const [selectedQuality, setSelectedQuality] = useState<'standard' | 'high' | 'ultra'>('high')
   const [selectedAspect, setSelectedAspect] = useState<RenderAspectRatio>('16:9')
   const [refinementPrompt, setRefinementPrompt] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
@@ -150,13 +151,21 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
     setLocationImage(null)
   }
 
-  // Real-time live architectural prompt synthesis
-  const livePrompt = useMemo(() => {
-    if (mode === 'interior') {
-      return buildInteriorPrompt(interiorSettings, refinementPrompt)
-    }
-    return buildExteriorPrompt(exteriorSettings, refinementPrompt)
-  }, [mode, interiorSettings, exteriorSettings, refinementPrompt])
+  // Real-time live architectural resolution & conflict detection
+  const resolvedConfig = useMemo(() => {
+    return resolveRendering({
+      category: mode,
+      exteriorSettings,
+      interiorSettings,
+      renderingMode: selectedRenderingMode,
+      quality: selectedQuality,
+      fallbackLighting: selectedLighting,
+      refinementPrompt,
+    })
+  }, [mode, exteriorSettings, interiorSettings, selectedRenderingMode, selectedQuality, selectedLighting, refinementPrompt])
+
+  const livePrompt = resolvedConfig.prompt
+  const liveWarnings = resolvedConfig.warnings
 
   // Modal / Lightbox State
   const [activeLightboxRender, setActiveLightboxRender] = useState<Render | null>(null)
@@ -281,6 +290,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
         engine: selectedEngine,
         lighting: selectedLighting,
         renderingMode: selectedRenderingMode,
+        quality: selectedQuality,
         environment: selectedEnvironment,
         geometryStrength,
         aspectRatio: selectedAspect,
@@ -486,6 +496,9 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
               onLocationImageSelect={handleLocationImageSelect}
               onLocationImageClear={handleLocationImageClear}
               livePrompt={livePrompt}
+              liveWarnings={liveWarnings}
+              quality={selectedQuality}
+              onQualityChange={setSelectedQuality}
             />
           </div>
 
@@ -833,11 +846,45 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
                   <p className="text-xs font-medium uppercase tracking-wider text-muted">
                     Vibe3D Synthesized Realism Parameters
                   </p>
-                  <p className="mt-1 text-xs text-muted leading-relaxed">
+                  <p className="mt-1 text-xs text-muted leading-relaxed font-mono bg-surface/50 p-2.5 rounded-lg border border-border/40">
                     {activeLightboxRender.enhancedPrompt}
                   </p>
                 </div>
               )}
+
+              {/* Warnings and Quality Audit */}
+              {Array.isArray(activeLightboxRender.metadata?.warnings) &&
+                (activeLightboxRender.metadata.warnings as string[]).length > 0 && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                    <p className="text-xs font-semibold text-amber-300">Option Adjustments Applied:</p>
+                    <ul className="mt-1.5 list-disc pl-4 text-xs text-amber-200/90 space-y-1">
+                      {(activeLightboxRender.metadata.warnings as string[]).map((w, idx) => (
+                        <li key={idx}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-muted">
+                <span className="rounded-md border border-border/60 bg-surface px-2 py-0.5">
+                  Provider: <span className="text-foreground font-medium">{activeLightboxRender.provider}</span>
+                </span>
+                {Boolean(activeLightboxRender.metadata?.quality) && (
+                  <span className="rounded-md border border-border/60 bg-surface px-2 py-0.5">
+                    Quality:{' '}
+                    <span className="text-foreground font-medium uppercase">
+                      {((activeLightboxRender.metadata?.quality as any)?.applied ||
+                        (activeLightboxRender.metadata?.quality as any)?.requested ||
+                        'standard')}
+                    </span>
+                  </span>
+                )}
+                {Boolean(activeLightboxRender.metadata?.negativePrompt) && (
+                  <span className="rounded-md border border-border/60 bg-surface px-2 py-0.5 text-muted">
+                    Negative Constraints Active
+                  </span>
+                )}
+              </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
                 {/* Project selector to set as thumbnail */}
