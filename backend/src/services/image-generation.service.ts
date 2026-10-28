@@ -677,19 +677,19 @@ export class ImageGenerationService {
       // Note: In Stability SDXL API, image_strength represents PRESERVATION STRENGTH (1.0 = keep original, 0.0 = replace).
       // For untextured 3D models/blockouts, a value of 0.58-0.62 preserves building envelope and perspective while providing 40% denoising latitude to synthesize PBR materials.
       try {
-        let effectiveStrength = 0.60
-        let cfgScale = '8.0'
+        let effectiveStrength = 0.38
+        let cfgScale = '8.5'
 
         if (renderingMode === 'preserve-structure') {
-          // 0.60 preservation: locks floor count, openings, and roofline while converting clay/wireframe into physical finishes
-          effectiveStrength = Math.max(0.55, Math.min(0.68, (geometryStrength || 0.85) * 0.72))
+          // 0.38 - 0.42 preservation: retains architectural massing and floor alignments while replacing CAD line drawings with real photographic materials
+          effectiveStrength = Math.max(0.35, Math.min(0.44, (geometryStrength || 0.85) * 0.46))
           cfgScale = '8.5'
         } else if (renderingMode === 'realistic-enhancement') {
-          effectiveStrength = 0.50
-          cfgScale = '7.5'
+          effectiveStrength = 0.32
+          cfgScale = '8.0'
         } else if (renderingMode === 'creative-redesign') {
-          effectiveStrength = 0.38
-          cfgScale = '7.0'
+          effectiveStrength = 0.25
+          cfgScale = '7.5'
         }
 
         console.log(`[ImageGen] Transforming architectural model with Stability AI SDXL img2img (${renderingMode}, calibrated preservation strength: ${effectiveStrength.toFixed(2)})...`)
