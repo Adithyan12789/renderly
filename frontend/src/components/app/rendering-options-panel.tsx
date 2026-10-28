@@ -129,6 +129,20 @@ export function RenderingOptionsPanel({
 
   return (
     <div className="flex flex-col gap-5 pt-2">
+      {/* Hidden Primary File Input - Shared across both Exterior and Interior modes */}
+      <input
+        ref={primaryFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            onUploadedImageSelect(e.target.files[0])
+            e.target.value = ''
+          }
+        }}
+      />
+
       {/* ============================================================== */}
       {/* EXTERIOR RENDERING WORKFLOW (exterior.txt) */}
       {/* ============================================================== */}
@@ -187,18 +201,6 @@ export function RenderingOptionsPanel({
                       </span>
                       <span className="text-[11px] font-normal text-muted">Preserves 100% massing & openings</span>
                     </label>
-
-                    <input
-                      ref={primaryFileInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          onUploadedImageSelect(e.target.files[0])
-                        }
-                      }}
-                    />
 
                     {!uploadedImage ? (
                       <div
@@ -286,6 +288,7 @@ export function RenderingOptionsPanel({
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
                           onLocationImageSelect(e.target.files[0])
+                          e.target.value = ''
                         }
                       }}
                     />
