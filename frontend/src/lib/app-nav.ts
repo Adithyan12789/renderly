@@ -1,4 +1,4 @@
-import { Box, Building2, Crown, Film, FolderKanban, LayoutGrid, Settings, ShieldCheck, Sofa, type LucideIcon } from 'lucide-react'
+import { Building2, Crown, Film, FolderKanban, LayoutGrid, Settings, ShieldCheck, Sofa, type LucideIcon } from 'lucide-react'
 
 export interface AppNavItem {
   label: string
@@ -13,7 +13,6 @@ export const APP_NAV: AppNavItem[] = [
   { label: 'Exterior', to: '/app/exterior', icon: Building2 },
   { label: 'Interior', to: '/app/interior', icon: Sofa },
   { label: 'Walkthrough', to: '/app/walkthroughs', icon: Film },
-  { label: '3D Studio', to: '/app/3d', icon: Box },
 ]
 
 export const APP_SECONDARY_NAV: AppNavItem[] = [

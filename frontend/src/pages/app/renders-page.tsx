@@ -170,19 +170,6 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const [renderToDelete, setRenderToDelete] = useState<Render | null>(null)
   const [isDeleting, setIsDeleting] = useState<boolean>(false)
 
-  // Pickup captured 3D viewport angle from 3D Studio if redirected
-  useEffect(() => {
-    try {
-      const captured3d = sessionStorage.getItem('renderly_captured_3d_viewport')
-      if (captured3d) {
-        setUploadedImage(captured3d)
-        sessionStorage.removeItem('renderly_captured_3d_viewport')
-        sessionStorage.removeItem('renderly_captured_model_name')
-        toast.success('3D Viewport angle loaded! Ready to synthesize render.')
-      }
-    } catch {}
-  }, [])
-
   // Load initial renders & projects
   useEffect(() => {
     let mounted = true
