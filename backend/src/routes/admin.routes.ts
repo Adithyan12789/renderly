@@ -214,7 +214,7 @@ adminRouter.get('/metrics', requireAdmin, async (_req, res, next) => {
         database: databaseStatus() ? 'connected' : 'disconnected',
         nodeVersion: process.version,
         uptimeSeconds: Math.floor(process.uptime()),
-        aiProvider: env.AI_IMAGE_PROVIDER || 'pollinations',
+        aiProvider: env.AI_IMAGE_PROVIDER || 'gemini-nano-banana-2.1',
         razorpayKeyId: env.RAZORPAY_KEY_ID || 'Not Configured',
       },
     })

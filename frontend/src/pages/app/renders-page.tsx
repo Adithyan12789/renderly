@@ -72,7 +72,7 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
   const generatorRef = useRef<HTMLDivElement>(null)
 
   // Vibe3D Control Parameters
-  const [selectedRenderingMode] = useState<RenderingMode>('preserve-structure')
+  const [selectedRenderingMode, setSelectedRenderingMode] = useState<RenderingMode>('preserve-structure')
   const [selectedEngine] = useState<RenderEngine>('hyperreal')
   const [selectedLighting] = useState<RenderLighting>('golden-hour')
   const [selectedStyle] = useState<RenderStyle>('modern-luxury')
@@ -499,6 +499,8 @@ export function RendersPage({ mode = 'exterior' }: RendersPageProps) {
               liveWarnings={liveWarnings}
               quality={selectedQuality}
               onQualityChange={setSelectedQuality}
+              renderingMode={selectedRenderingMode}
+              onRenderingModeChange={setSelectedRenderingMode}
             />
           </div>
 

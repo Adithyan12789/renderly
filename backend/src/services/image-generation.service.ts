@@ -5,108 +5,11 @@ import sharp from 'sharp'
 import { env } from '../config/env.js'
 import type { RenderAspectRatio, RenderEngine, RenderLighting, RenderStyle } from '../models/render.model.js'
 import {
-  buildExteriorPrompt,
-  buildInteriorPrompt,
-  buildNegativePrompt,
   type ExteriorSettings,
   type InteriorSettings,
 } from '../utils/prompt-builder.js'
 import { HttpError } from '../utils/http-error.js'
 import { resolveRendering, type AuditEntry, type RenderQuality } from '../utils/render-settings.js'
-
-const STYLE_ENHANCERS: Record<RenderStyle, string> = {
-  'modern-luxury':
-    'modern luxury architecture, travertine and honed limestone, expansive floor-to-ceiling glass, subtle bronze mullions, dramatic cantilevered roofline, ambient warm cove lighting, dusk golden hour illumination, infinity reflection pool, professional architectural photography, 8k resolution, octane render, archdaily feature, photorealistic masterpiece',
-  scandinavian:
-    'Scandinavian modern architecture, pale vertical pine cladding, crisp white lime-wash plaster, massive Nordic windows inviting natural daylight, clean hygge aesthetics, tranquil sub-arctic forest background, diffused soft morning light, hyper-detailed, architectural magazine photography, 8k photorealistic',
-  tropical:
-    'tropical modern luxury architecture, rich teak and ipe wood louvers, exposed tactile board-formed concrete, seamless indoor-outdoor open living pavilion, lush exotic palms, monstera, tropical reflection pond, warm balmy sunlight, ocean breeze ambiance, 8k architectural photography, photorealistic',
-  minimal:
-    'monolithic minimalist architecture, ultra-smooth poured architectural concrete, sharp geometric volumes, hidden frameless glazing, silent courtyard reflecting pool, tranquil zen atmosphere, soft overcast natural daylight, 8k photorealistic',
-  japanese:
-    'contemporary Japanese architecture, charred shou sugi ban cedar siding, blackened steel accents, private stone zen rock garden, sculptural maple tree, paper shoji inspired diffused windows, peaceful serenity, 8k photorealistic',
-  industrial:
-    'luxury industrial loft architecture, weathered dark brickwork, exposed black steel I-beams, oversized crittall grid windows, double-height ceilings, polished concrete floors, dramatic golden hour contrast, 8k photorealistic',
-  'warm-cozy':
-    'warm alpine organic modern architecture, dry-stacked split fieldstone, heavy timber beams, floor-to-ceiling glass looking onto misty mountain pine ridge, ambient glowing hearth, twilight, 8k photorealistic',
-  futuristic:
-    'futuristic organic architecture, biomorphic parametric curves, seamless white matte composite facade, hidden linear LED accent illumination, floor-to-ceiling curved glass, twilight sky, 8k photorealistic',
-}
-
-const ENGINE_ENHANCERS: Record<RenderEngine, string> = {
-  hyperreal:
-    'Vibe3D UltraReal Master 8K Studio render, award-winning architectural photography, physically based rendering, Hasselblad H6D-100c 100MP optical clarity, 24mm tilt-shift architectural lens, ArchDaily building of the year feature, physically based ray-traced materials, smooth light-gray honed architectural concrete, warm natural teak wood slats and pergola louvers, natural oak wood plank flooring, floor-to-ceiling ultra-clear low-iron glass walls with soft reflections, warm 3000K interior architectural lighting, turquoise crystal clear pool water, clean subtle studio shadow on floor, raytraced ambient occlusion, global illumination, perfectly textured architectural model, zero sketch lines, zero wireframe, photorealistic finishes',
-  lumen:
-    'Vibe3D Lumen production render, physically based rendering, natural daylighting and soft penumbra shadows, clean modern materials, high dynamic range exposure, portfolio quality',
-  fidelity:
-    'Vibe3D Fidelity architectural visualization, strict structural edge alignment, accurate building massing, crisp geometric openings, photorealistic realistic finishes, true-to-geometry textures',
-}
-
-const LIGHTING_ENHANCERS: Record<RenderLighting, string> = {
-  'golden-hour':
-    'warm dusk golden hour illumination, low sun angle, long dramatic soft shadows, warm 3000K interior cove lighting shining through floor-to-ceiling glass, sunset sky with amber and rose gradients',
-  daylight:
-    'bright crisp natural morning daylight, clear blue sky, sharp defined shadows, high dynamic range, natural architectural illumination',
-  dusk:
-    'blue hour twilight, dramatic architectural exterior uplighting, illuminated warm interior pendant lights, glowing linear LEDs, dark indigo twilight sky',
-  overcast:
-    'soft diffused overcast daylight, shadowless architectural magazine editorial look, pure even light, museum quality atmosphere',
-  night:
-    'dramatic architectural night illumination, illuminated infinity reflection pool with subtle water caustics, exterior spotlights grazing facade textures, starlit sky, luxury resort atmosphere',
-}
-
-const ENVIRONMENT_ENHANCERS: Record<string, string> = {
-  'landscaped-gardens':
-    'lush manicured architectural landscaping, mature exotic specimen trees, reflection water pool, ornamental grasses',
-  'pine-forest':
-    'tranquil alpine pine forest background, misty mountain atmosphere, evergreen trees',
-  coastal:
-    'breathtaking coastal oceanfront horizon, gentle sea spray, azure water reflection',
-  urban:
-    'sleek metropolitan urban setting, clean architectural streetscape, polished wet pavement',
-  zen:
-    'private minimalist stone zen courtyard, raked gravel garden, sculptural Japanese maple',
-  desert:
-    'sculptural desert landscape, red rock formations, saguaro cacti, golden desert sand',
-  'interior-living':
-    'double-height luxury interior living room, bespoke designer furniture, floor-to-ceiling windows, high-end architectural interior photography',
-  'interior-kitchen':
-    'open-concept luxury chef kitchen and dining space, monolithic marble island, integrated minimalist cabinetry, designer barstools',
-  'interior-bedroom':
-    'serene luxury master bedroom suite, upholstered low-profile platform bed, natural linen bedding, architectural headboard wall, tranquil atmosphere',
-  'interior-bathroom':
-    'spa-like minimalist bathroom, freestanding soaking tub, natural stone slabs, brushed nickel fixtures, skylight illumination',
-  'interior-lounge':
-    'moody penthouse cocktail lounge, plush velvet seating, smoked bronze glass, ambient backlit wine display',
-  'interior-office':
-    'sunlit executive corner office, minimalist walnut desk, architectural shelving, expansive panoramic city vista',
-}
-
-// Stability AI SDXL supported exact dimensions
-const STABILITY_DIMENSIONS: Record<RenderAspectRatio, { width: number; height: number }> = {
-  '16:9': { width: 1344, height: 768 },
-  '4:3': { width: 1152, height: 896 },
-  '1:1': { width: 1024, height: 1024 },
-  '9:16': { width: 768, height: 1344 },
-}
-
-const ASPECT_DIMENSIONS: Record<RenderAspectRatio, { width: number; height: number; openaiSize: '1024x1024' | '1792x1024' | '1024x1792' }> = {
-  '16:9': { width: 1280, height: 720, openaiSize: '1792x1024' },
-  '4:3': { width: 1024, height: 768, openaiSize: '1024x1024' },
-  '1:1': { width: 1024, height: 1024, openaiSize: '1024x1024' },
-  '9:16': { width: 720, height: 1280, openaiSize: '1024x1792' },
-}
-
-const FALLBACK_STYLES: Record<RenderStyle, string> = {
-  'modern-luxury': '/images/hero-villa.png',
-  scandinavian: '/images/gallery-loft.png',
-  tropical: '/images/gallery-pavilion.png',
-  minimal: '/images/gallery-tower.png',
-  japanese: '/images/gallery-pavilion.png',
-  industrial: '/images/gallery-kitchen.png',
-  'warm-cozy': '/images/gallery-bedroom.png',
-  futuristic: '/images/gallery-tower.png',
-}
 
 export type RenderingMode = 'preserve-structure' | 'realistic-enhancement' | 'creative-redesign'
 
@@ -140,15 +43,38 @@ export interface GenerateImageResult {
   enhancedPrompt: string
   provider: string
   aspectRatio?: RenderAspectRatio
-  /** Conflicts, unsupported settings and provider problems the user should know about. */
   warnings?: string[]
-  /** Per-option mapping: prompt, provider parameter, negative prompt, or documented exclusion. */
   audit?: AuditEntry[]
   effectiveSettings?: Record<string, unknown>
   negativePrompt?: string
   quality?: { requested: RenderQuality; applied: RenderQuality }
-  /** What was actually sent to the provider (endpoint and numeric parameters). */
   providerRequest?: Record<string, unknown>
+}
+
+interface GeminiInlineData {
+  mimeType?: string
+  mime_type?: string
+  data?: string
+}
+
+interface GeminiCandidatePart {
+  text?: string
+  inlineData?: GeminiInlineData
+  inline_data?: GeminiInlineData
+}
+
+interface GeminiGenerateContentResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiCandidatePart[]
+    }
+    finishReason?: string
+  }>
+  error?: {
+    code?: number
+    message?: string
+    status?: string
+  }
 }
 
 export class ImageGenerationService {
@@ -162,6 +88,28 @@ export class ImageGenerationService {
       fs.mkdirSync(sourcesDir, { recursive: true })
     }
     return { rendersDir, sourcesDir }
+  }
+
+  /**
+   * Resolves the configured Gemini / Nano Banana 2.1 API key from environment variables.
+   */
+  private static getApiKey(): string {
+    const apiKey = (env.GEMINI_API_KEY || env.NANO_BANANA_API_KEY || process.env.GEMINI_API_KEY || process.env.NANO_BANANA_API_KEY || '').trim()
+    if (!apiKey) {
+      throw new HttpError(
+        500,
+        'GEMINI_API_KEY is not configured on the server. Please add your Gemini Nano Banana 2.1 API key from https://aistudio.google.com/apikey to backend/.env to enable AI image rendering.',
+        'GEMINI_KEY_MISSING',
+      )
+    }
+    return apiKey
+  }
+
+  /**
+   * Resolves the active Nano Banana model name.
+   */
+  private static getModelName(): string {
+    return (env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1').trim()
   }
 
   /**
@@ -184,7 +132,6 @@ export class ImageGenerationService {
       const fileName = `source-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jpg`
       const filePath = path.join(sourcesDir, fileName)
 
-      // Optimize and save as clean JPEG
       await sharp(rawBuffer).jpeg({ quality: 95 }).toFile(filePath)
       const metadata = await sharp(filePath).metadata()
       const width = metadata.width || 1024
@@ -200,7 +147,6 @@ export class ImageGenerationService {
       }
     }
 
-    // Check if it's a server local path (e.g., /uploads/..., uploads/..., assets/..., /images/...)
     let localFilePath: string | null = null
     if (imageInput.startsWith('/uploads/') || imageInput.startsWith('uploads/')) {
       const rel = imageInput.startsWith('/') ? imageInput.slice(1) : imageInput
@@ -209,7 +155,6 @@ export class ImageGenerationService {
       const rel = imageInput.startsWith('/') ? imageInput.slice(1) : imageInput
       localFilePath = path.resolve(process.cwd(), rel)
     } else if (imageInput.startsWith('/images/')) {
-      // Check backend uploads/samples first, then public/images
       const inSamples = path.resolve(process.cwd(), 'uploads', imageInput.replace('/images/', ''))
       const inFrontend = path.resolve(process.cwd(), '../frontend/public', imageInput.slice(1))
       if (fs.existsSync(inSamples)) {
@@ -228,7 +173,6 @@ export class ImageGenerationService {
       const height = metadata.height || 768
       const detectedAspect = this.computeAspectRatio(width, height)
 
-      // Copy to sources if not already there
       const fileName = `source-${Date.now()}-${path.basename(localFilePath)}`
       const targetPath = path.join(sourcesDir, fileName)
       fs.copyFileSync(localFilePath, targetPath)
@@ -242,9 +186,11 @@ export class ImageGenerationService {
       }
     }
 
-    // If remote URL
     if (imageInput.startsWith('http://') || imageInput.startsWith('https://')) {
       const response = await fetch(imageInput)
+      if (!response.ok) {
+        throw new HttpError(400, `Could not download reference image: HTTP ${response.status}`, 'IMAGE_DOWNLOAD_FAILED')
+      }
       rawBuffer = Buffer.from(await response.arrayBuffer())
       const fileName = `source-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jpg`
       const filePath = path.join(sourcesDir, fileName)
@@ -263,10 +209,10 @@ export class ImageGenerationService {
       }
     }
 
-    throw new Error('Unsupported image input format. Please upload a valid PNG, JPG, or WebP file.')
+    throw new HttpError(400, 'Unsupported image input format. Please upload a valid PNG, JPG, or WebP file.', 'INVALID_IMAGE_FORMAT')
   }
 
-  private static computeAspectRatio(width: number, height: number): RenderAspectRatio {
+  public static computeAspectRatio(width: number, height: number): RenderAspectRatio {
     const ratio = width / height
     if (ratio > 1.45) return '16:9'
     if (ratio > 1.15) return '4:3'
@@ -274,318 +220,332 @@ export class ImageGenerationService {
     return '1:1'
   }
 
-  public static buildRealismPrompt(options: {
-    style: RenderStyle
-    engine: RenderEngine
-    lighting: RenderLighting
-    environment?: string
-    refinementPrompt?: string
-    category?: 'exterior' | 'interior'
-  }): string {
-    const styleDesc = STYLE_ENHANCERS[options.style] || STYLE_ENHANCERS['modern-luxury']
-    const engineDesc = ENGINE_ENHANCERS[options.engine] || ENGINE_ENHANCERS.hyperreal
-    const lightingDesc = LIGHTING_ENHANCERS[options.lighting] || LIGHTING_ENHANCERS['golden-hour']
-    const envDesc = options.environment && ENVIRONMENT_ENHANCERS[options.environment]
-      ? ENVIRONMENT_ENHANCERS[options.environment]
-      : ENVIRONMENT_ENHANCERS['landscaped-gardens']
-
-    const categoryDesc =
-      options.category === 'interior'
-        ? 'architectural interior photography, realistic luxury interior design, indoor space visualization, detailed materials and ambient indoor lighting'
-        : 'architectural exterior photography, building facade, outdoor massing and site environment'
-
-    const parts = [
-      engineDesc,
-      categoryDesc,
-      styleDesc,
-      lightingDesc,
-      envDesc,
-    ]
-
-    if (options.refinementPrompt && options.refinementPrompt.trim().length > 0) {
-      parts.push(options.refinementPrompt.trim())
-    }
-
-    return parts.join(', ')
+  /**
+   * Translates application quality tiers into Nano Banana 2.1 supported imageSize values ("1K", "2K", "4K").
+   */
+  private static mapQualityToNanoBananaSize(quality: RenderQuality): '1K' | '2K' | '4K' {
+    if (quality === 'ultra') return '4K'
+    if (quality === 'high') return '2K'
+    return '1K'
   }
 
-  private static getTemplatePath(category: 'exterior' | 'interior', style: RenderStyle): string {
-    const templatesDir = path.resolve(process.cwd(), 'assets', 'templates')
-    if (category === 'interior') {
-      if (style === 'industrial') return path.join(templatesDir, 'gallery-kitchen.png')
-      if (style === 'warm-cozy') return path.join(templatesDir, 'gallery-bedroom.png')
-      return path.join(templatesDir, 'gallery-loft.png')
-    } else {
-      if (style === 'tropical' || style === 'japanese') return path.join(templatesDir, 'gallery-pavilion.png')
-      if (style === 'minimal' || style === 'futuristic') return path.join(templatesDir, 'gallery-tower.png')
-      return path.join(templatesDir, 'hero-villa.png')
+  /**
+   * Diagnostic logger that formats execution trace without exposing sensitive secrets.
+   */
+  private static logDiagnostics(info: {
+    requestId: string
+    category: string
+    action: string
+    model: string
+    endpoint: string
+    dimensions?: string
+    imageSizeBytes?: number
+    sectionsIncluded?: string[]
+    normalizedSettings?: Record<string, unknown>
+    durationMs?: number
+    status?: 'success' | 'failed'
+    providerRequestId?: string | null
+    errorDetails?: string | null
+  }) {
+    console.log(
+      `[ImageGen][${info.requestId}] ${info.action.toUpperCase()} (${info.category}) | Model: ${info.model} | Endpoint: ${info.endpoint}` +
+        (info.dimensions ? ` | Size: ${info.dimensions}` : '') +
+        (info.imageSizeBytes ? ` | Image: ${(info.imageSizeBytes / 1024).toFixed(1)} KB` : '') +
+        (info.durationMs !== undefined ? ` | Duration: ${info.durationMs}ms` : '') +
+        (info.status ? ` | Status: ${info.status}` : '') +
+        (info.providerRequestId ? ` | ReqId: ${info.providerRequestId}` : '') +
+        (info.errorDetails ? ` | Error: ${info.errorDetails}` : ''),
+    )
+    if (info.sectionsIncluded && info.sectionsIncluded.length) {
+      console.log(`[ImageGen][${info.requestId}] Sections applied: ${info.sectionsIncluded.join(', ')}`)
     }
   }
 
   /**
-   * Generates a photorealistic atmospheric sky/environment plate for architectural lighting presets.
+   * Extracts the generated image Buffer from a Gemini Nano Banana 2.1 generateContent response.
    */
-  private static async generateAtmospherePlate(
-    width: number,
-    height: number,
-    lighting: RenderLighting,
-  ): Promise<Buffer> {
-    const skyBuffer = Buffer.alloc(width * height * 3)
+  private static extractImageFromGeminiResponse(data: GeminiGenerateContentResponse): Buffer | null {
+    const parts = data.candidates?.[0]?.content?.parts
+    if (!Array.isArray(parts)) return null
 
-    for (let y = 0; y < height; y++) {
-      const t = y / height
-      let r = 180, g = 190, b = 205
-
-      if (lighting === 'golden-hour') {
-        // Deep twilight blue top -> warm slate -> golden sunset horizon -> warm earth
-        if (t < 0.35) {
-          const f = t / 0.35
-          r = Math.round(35 + f * (115 - 35))
-          g = Math.round(65 + f * (145 - 65))
-          b = Math.round(115 + f * (165 - 115))
-        } else if (t < 0.70) {
-          const f = (t - 0.35) / 0.35
-          r = Math.round(115 + f * (245 - 115))
-          g = Math.round(145 + f * (160 - 145))
-          b = Math.round(165 + f * (90 - 165))
-        } else {
-          const f = (t - 0.70) / 0.30
-          r = Math.round(245 + f * (215 - 245))
-          g = Math.round(160 + f * (120 - 160))
-          b = Math.round(90 + f * (70 - 90))
-        }
-      } else if (lighting === 'daylight') {
-        // Crisp azure sky gradient
-        if (t < 0.50) {
-          const f = t / 0.50
-          r = Math.round(45 + f * (110 - 45))
-          g = Math.round(115 + f * (175 - 115))
-          b = Math.round(200 + f * (235 - 200))
-        } else {
-          const f = (t - 0.50) / 0.50
-          r = Math.round(110 + f * (210 - 110))
-          g = Math.round(175 + f * (230 - 175))
-          b = Math.round(235 + f * (250 - 235))
-        }
-      } else if (lighting === 'dusk') {
-        // Deep blue hour twilight with glowing warm horizon
-        if (t < 0.60) {
-          const f = t / 0.60
-          r = Math.round(16 + f * (32 - 16))
-          g = Math.round(26 + f * (52 - 26))
-          b = Math.round(52 + f * (95 - 52))
-        } else {
-          const f = (t - 0.60) / 0.40
-          r = Math.round(32 + f * (145 - 32))
-          g = Math.round(52 + f * (95 - 52))
-          b = Math.round(95 + f * (90 - 95))
-        }
-      } else if (lighting === 'overcast') {
-        // Soft silvery museum-grade diffused sky
-        r = Math.round(155 + t * (215 - 155))
-        g = Math.round(162 + t * (218 - 162))
-        b = Math.round(172 + t * (224 - 172))
-      } else if (lighting === 'night') {
-        // Midnight indigo sky
-        r = Math.round(8 + t * (28 - 8))
-        g = Math.round(12 + t * (36 - 12))
-        b = Math.round(24 + t * (56 - 24))
+    for (const part of parts) {
+      const inline = part.inlineData || part.inline_data
+      if (inline?.data) {
+        return Buffer.from(inline.data, 'base64')
       }
+    }
+    return null
+  }
 
-      for (let x = 0; x < width; x++) {
-        const idx = (y * width + x) * 3
+  /**
+   * Executes a multimodal image-editing request against Gemini Nano Banana 2.1
+   * (`POST https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent`).
+   * Includes bounded retries for transient 5xx server issues.
+   */
+  private static async executeNanoBananaImageEdit(options: {
+    requestId: string
+    imageBuffer: Buffer
+    locationImageBuffer?: Buffer | null
+    prompt: string
+    negativePrompt?: string
+    aspectRatio?: RenderAspectRatio
+    quality: RenderQuality
+    category: 'exterior' | 'interior'
+    normalizedSettings?: Record<string, unknown>
+    sectionsIncluded?: string[]
+    inputDimensions?: { width: number; height: number }
+  }): Promise<{ buffer: Buffer; providerRequestId: string | null; modelUsed: string }> {
+    const apiKey = this.getApiKey()
+    const model = this.getModelName()
+    const endpointPath = `/v1beta/models/${model}:generateContent`
+    const endpoint = `https://generativelanguage.googleapis.com${endpointPath}`
+    const imageSize = this.mapQualityToNanoBananaSize(options.quality)
+    const aspectRatio = options.aspectRatio || '16:9'
+    const startTime = Date.now()
 
-        if (lighting === 'golden-hour') {
-          // Warm sun volumetric flare at upper right
-          const dx = (x / width) - 0.78
-          const dy = (y / height) - 0.28
-          const dist = Math.sqrt(dx * dx * 1.6 + dy * dy)
-          if (dist < 0.42) {
-            const glow = Math.pow(1 - dist / 0.42, 1.8) * 0.55
-            skyBuffer[idx] = Math.min(255, Math.round(r + glow * (255 - r)))
-            skyBuffer[idx + 1] = Math.min(255, Math.round(g + glow * (248 - g)))
-            skyBuffer[idx + 2] = Math.min(255, Math.round(b + glow * (180 - b)))
+    const combinedTextPrompt = options.negativePrompt
+      ? `${options.prompt}\n\nSTRICT NEGATIVE CONSTRAINTS (DO NOT INCLUDE): ${options.negativePrompt}`
+      : options.prompt
+
+    this.logDiagnostics({
+      requestId: options.requestId,
+      category: options.category,
+      action: 'dispatch_nano_banana_edit',
+      model,
+      endpoint: endpointPath,
+      dimensions: options.inputDimensions ? `${options.inputDimensions.width}x${options.inputDimensions.height}` : undefined,
+      imageSizeBytes: options.imageBuffer.length,
+      sectionsIncluded: options.sectionsIncluded,
+      normalizedSettings: options.normalizedSettings,
+    })
+
+    const maxAttempts = 2
+    let attempt = 0
+    let lastError: HttpError | null = null
+
+    while (attempt < maxAttempts) {
+      attempt++
+      try {
+        const parts: Array<Record<string, unknown>> = [
+          { text: combinedTextPrompt },
+          {
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: options.imageBuffer.toString('base64'),
+            },
+          },
+        ]
+
+        if (options.locationImageBuffer) {
+          parts.push({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: options.locationImageBuffer.toString('base64'),
+            },
+          })
+        }
+
+        const requestBody = {
+          contents: [
+            {
+              role: 'user',
+              parts,
+            },
+          ],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            imageConfig: {
+              aspectRatio,
+              imageSize,
+            },
+          },
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        const durationMs = Date.now() - startTime
+        const providerRequestId = response.headers.get('x-request-id') || response.headers.get('x-goog-request-id')
+
+        if (!response.ok) {
+          const rawErrorText = await response.text()
+          let parsedError: GeminiGenerateContentResponse | null = null
+          try {
+            parsedError = JSON.parse(rawErrorText) as GeminiGenerateContentResponse
+          } catch {
+            // non-json response
+          }
+
+          const errMsg = parsedError?.error?.message || rawErrorText
+          const errStatus = parsedError?.error?.status || null
+
+          this.logDiagnostics({
+            requestId: options.requestId,
+            category: options.category,
+            action: 'nano_banana_error_response',
+            model,
+            endpoint: endpointPath,
+            durationMs,
+            status: 'failed',
+            providerRequestId,
+            errorDetails: `HTTP ${response.status} (${errStatus || 'unknown'}): ${errMsg.slice(0, 300)}`,
+          })
+
+          // 401 / 403: Invalid API Key or Permission Denied
+          if (response.status === 401 || response.status === 403 || /API_KEY_INVALID|invalid api key/i.test(errMsg)) {
+            throw new HttpError(
+              401,
+              'Authentication failed: Invalid Gemini Nano Banana 2.1 API key. Please check your GEMINI_API_KEY in backend/.env.',
+              'GEMINI_AUTH_ERROR',
+            )
+          }
+
+          // 429: Quota / Billing Exhaustion vs Rate Limit
+          if (response.status === 429) {
+            const isQuotaExhausted =
+              errStatus === 'RESOURCE_EXHAUSTED' ||
+              /quota|billing|credit/i.test(errMsg)
+
+            if (isQuotaExhausted) {
+              throw new HttpError(
+                429,
+                'Gemini Nano Banana 2.1 quota or billing limit reached. Please check your quota at https://aistudio.google.com/apikey to continue AI rendering.',
+                'GEMINI_QUOTA_EXHAUSTED',
+              )
+            }
+
+            throw new HttpError(
+              429,
+              'Nano Banana 2.1 rate limit reached. Please wait a few seconds before generating another render.',
+              'GEMINI_RATE_LIMIT',
+            )
+          }
+
+          // 400: Bad Request / Safety Filter / Invalid Parameters
+          if (response.status === 400) {
+            throw new HttpError(
+              400,
+              `Nano Banana 2.1 rejected the rendering request: ${errMsg}`,
+              'GEMINI_INVALID_REQUEST',
+            )
+          }
+
+          // 5xx: Transient Server Errors (allow bounded retry)
+          if (response.status >= 500 && attempt < maxAttempts) {
+            console.warn(`[ImageGen][${options.requestId}] Transient Nano Banana 2.1 5xx error (${response.status}), retrying in 1.5s...`)
+            await new Promise((resolve) => setTimeout(resolve, 1500))
             continue
           }
-        } else if (lighting === 'daylight') {
-          const dx = (x / width) - 0.72
-          const dy = (y / height) - 0.22
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < 0.35) {
-            const glow = Math.pow(1 - dist / 0.35, 2.0) * 0.40
-            skyBuffer[idx] = Math.min(255, Math.round(r + glow * (255 - r)))
-            skyBuffer[idx + 1] = Math.min(255, Math.round(g + glow * (255 - g)))
-            skyBuffer[idx + 2] = Math.min(255, Math.round(b + glow * (255 - b)))
-            continue
-          }
+
+          throw new HttpError(
+            502,
+            `Nano Banana 2.1 image-editing service returned an error (HTTP ${response.status}): ${errMsg}`,
+            'GEMINI_SERVER_ERROR',
+          )
         }
 
-        skyBuffer[idx] = r
-        skyBuffer[idx + 1] = g
-        skyBuffer[idx + 2] = b
-      }
-    }
+        const data = (await response.json()) as GeminiGenerateContentResponse
+        const generatedBuffer = this.extractImageFromGeminiResponse(data)
 
-    return sharp(skyBuffer, { raw: { width, height, channels: 3 } }).jpeg().toBuffer()
-  }
+        if (!generatedBuffer || generatedBuffer.length < 2000) {
+          throw new HttpError(
+            502,
+            'Nano Banana 2.1 returned an empty or invalid image response. Please try again.',
+            'GEMINI_EMPTY_RESPONSE',
+          )
+        }
 
-  /**
-   * Generates a soft ground contact shadow to naturally ground 3D architectural models.
-   */
-  private static async generateGroundShadow(width: number, height: number): Promise<Buffer> {
-    const shadowBuffer = Buffer.alloc(width * height * 4)
-    const cx = width * 0.50
-    const cy = height * 0.80
-    const rx = width * 0.48
-    const ry = height * 0.24
+        this.logDiagnostics({
+          requestId: options.requestId,
+          category: options.category,
+          action: 'render_synthesis_success',
+          model,
+          endpoint: endpointPath,
+          durationMs,
+          status: 'success',
+          providerRequestId,
+        })
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const dx = (x - cx) / rx
-        const dy = (y - cy) / ry
-        const d = Math.sqrt(dx * dx + dy * dy)
-        const idx = (y * width + x) * 4
-
-        if (d < 1.0) {
-          const falloff = Math.pow(Math.cos((d * Math.PI) / 2), 1.5)
-          shadowBuffer[idx] = 16
-          shadowBuffer[idx + 1] = 22
-          shadowBuffer[idx + 2] = 32
-          shadowBuffer[idx + 3] = Math.round(falloff * 155)
+        return {
+          buffer: generatedBuffer,
+          providerRequestId,
+          modelUsed: model,
+        }
+      } catch (err) {
+        if (err instanceof HttpError) {
+          // Do not retry client or permanent errors (401, 400, 429)
+          if (err.status < 500) throw err
+          lastError = err
         } else {
-          shadowBuffer[idx + 3] = 0
+          lastError = new HttpError(
+            500,
+            `Network failure communicating with Nano Banana 2.1 API: ${(err as Error).message}`,
+            'GEMINI_NETWORK_ERROR',
+          )
+        }
+
+        if (attempt < maxAttempts) {
+          console.warn(`[ImageGen][${options.requestId}] Request attempt ${attempt} failed: ${lastError.message}. Retrying...`)
+          await new Promise((resolve) => setTimeout(resolve, 1500))
         }
       }
     }
 
-    return sharp(shadowBuffer, { raw: { width, height, channels: 4 } }).png().toBuffer()
-  }
-
-  /**
-   * Performs 4-way BFS flood-fill from border pixels to isolate only external viewport backgrounds.
-   * Protects all white ceilings, white roofs, and white interior surfaces inside the building.
-   */
-  private static segmentExternalBackground(
-    data: Buffer,
-    width: number,
-    height: number,
-    channels: number,
-  ): { hasExternalBackground: boolean; isBackground: Uint8Array } {
-    const isBackground = new Uint8Array(width * height)
-    const queue = new Int32Array(width * height)
-    let qHead = 0
-    let qTail = 0
-
-    function isWhitePixel(idx: number): boolean {
-      const r = data[idx * channels]
-      const g = data[idx * channels + 1]
-      const b = data[idx * channels + 2]
-      return r > 238 && g > 238 && b > 238
-    }
-
-    let borderWhiteCount = 0
-    const totalBorderPixels = width * 2 + (height - 2) * 2
-
-    // Scan top & bottom borders
-    for (let x = 0; x < width; x++) {
-      if (isWhitePixel(x)) {
-        isBackground[x] = 1
-        queue[qTail++] = x
-        borderWhiteCount++
-      }
-      const bottomIdx = (height - 1) * width + x
-      if (isWhitePixel(bottomIdx)) {
-        isBackground[bottomIdx] = 1
-        queue[qTail++] = bottomIdx
-        borderWhiteCount++
-      }
-    }
-
-    // Scan left & right borders
-    for (let y = 1; y < height - 1; y++) {
-      const leftIdx = y * width
-      if (!isBackground[leftIdx] && isWhitePixel(leftIdx)) {
-        isBackground[leftIdx] = 1
-        queue[qTail++] = leftIdx
-        borderWhiteCount++
-      }
-      const rightIdx = y * width + (width - 1)
-      if (!isBackground[rightIdx] && isWhitePixel(rightIdx)) {
-        isBackground[rightIdx] = 1
-        queue[qTail++] = rightIdx
-        borderWhiteCount++
-      }
-    }
-
-    // If borders are not predominantly white/light (e.g. photo or full-bleed interior), don't cutout
-    const hasExternalBackground = borderWhiteCount / totalBorderPixels > 0.40
-    if (!hasExternalBackground) {
-      return { hasExternalBackground: false, isBackground: new Uint8Array(width * height) }
-    }
-
-    // Run BFS flood fill strictly outside the building contours
-    while (qHead < qTail) {
-      const cur = queue[qHead++]
-      const cx = cur % width
-      const cy = Math.floor(cur / width)
-
-      const neighbors = []
-      if (cx > 0) neighbors.push(cur - 1)
-      if (cx < width - 1) neighbors.push(cur + 1)
-      if (cy > 0) neighbors.push(cur - width)
-      if (cy < height - 1) neighbors.push(cur + width)
-
-      for (const nb of neighbors) {
-        if (!isBackground[nb] && isWhitePixel(nb)) {
-          isBackground[nb] = 1
-          queue[qTail++] = nb
-        }
-      }
-    }
-
-    return { hasExternalBackground: true, isBackground }
+    throw lastError || new HttpError(500, 'Rendering failed after multiple attempts.', 'RENDER_FAILED')
   }
 
   /**
    * Transforms an uploaded 3D model viewport or photo into a photorealistic render
-   * preserving 100% of geometry, structure, openings, and perspective (Vibe3D Core Workflow).
+   * using Gemini Nano Banana 2.1 (`gemini-nano-banana-2.1`) as the active AI rendering provider.
    */
   public static async generateRenderFromImage(
     options: GenerateImageFromModelOptions,
   ): Promise<GenerateImageResult> {
     const {
       image,
-      style,
-      engine = 'hyperreal',
       lighting = 'golden-hour',
       renderingMode = 'preserve-structure',
-      environment = 'landscaped-gardens',
-      geometryStrength = 0.85,
       refinementPrompt = '',
       category = 'exterior',
+      quality = 'standard',
     } = options
 
+    const requestId = `req-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
     const { rendersDir } = this.ensureDirs()
 
-    // 1. Resolve source image and optional location image
-    const { buffer: rawSourceBuffer, sourceUrl, detectedAspect, width: origWidth, height: origHeight } =
-      await this.resolveSourceImage(image)
+    // 1. Resolve source image and optional secondary location reference
+    const {
+      buffer: rawSourceBuffer,
+      sourceUrl,
+      detectedAspect,
+      width: origWidth,
+      height: origHeight,
+    } = await this.resolveSourceImage(image)
+
     const targetAspect: RenderAspectRatio = options.aspectRatio || detectedAspect
-    const { width: targetWidth, height: targetHeight } =
-      STABILITY_DIMENSIONS[targetAspect] || STABILITY_DIMENSIONS['16:9']
 
     let locationImageUrl: string | null = null
+    let locationImageBuffer: Buffer | null = null
     if (options.locationImage) {
       try {
         const locRes = await this.resolveSourceImage(options.locationImage)
         locationImageUrl = locRes.sourceUrl || null
+        locationImageBuffer = await sharp(locRes.buffer)
+          .resize(1536, 1536, { fit: 'inside', withoutEnlargement: false })
+          .jpeg({ quality: 92 })
+          .toBuffer()
       } catch (err) {
-        console.warn('[ImageGen] Could not resolve secondary location reference image:', err)
+        console.warn(`[ImageGen][${requestId}] Could not resolve secondary location reference image:`, err)
       }
     }
 
-    // Single effective configuration: validated, conflict-resolved, shared with the preview endpoint.
-    const quality: RenderQuality = options.quality || 'standard'
+    // 2. Resolve settings and construct full structured prompt
     const effective = resolveRendering({
       category,
       exteriorSettings: options.exteriorSettings,
@@ -595,531 +555,164 @@ export class ImageGenerationService {
       fallbackLighting: lighting,
       refinementPrompt,
     })
-    const effectiveLighting = effective.lighting
+
     const warnings: string[] = [...effective.warnings]
     const audit = [...effective.audit]
+    const enhancedPrompt = effective.prompt
+    const negativeConstraints = effective.negativePrompt
 
-    // 2. Prepare high-quality resized buffer maintaining crisp resolution
-    const preparedInitBuffer = await sharp(rawSourceBuffer)
-      .resize(targetWidth, targetHeight, { fit: 'cover' })
-      .jpeg({ quality: 95 })
-      .toBuffer()
-
-    let enhancedPrompt = ''
-    let negativeConstraints = ''
-
-    if ((category === 'exterior' && options.exteriorSettings) || (category === 'interior' && options.interiorSettings)) {
-      enhancedPrompt = effective.prompt
-      negativeConstraints = effective.negativePrompt
-    } else {
-      enhancedPrompt = this.buildRealismPrompt({
-        style,
-        engine,
-        lighting: effectiveLighting,
-        environment,
-        refinementPrompt,
-        category,
-      })
-      negativeConstraints = category === 'exterior'
-        ? 'altering building geometry, changing window locations, changing roofline, adding or removing floors, moving doors, deformed structure, distorted walls, crooked lines, wireframe, clay render, sketch lines, cartoon, low resolution, blurry, watermark, bad architecture'
-        : 'altering room layout, moving walls, moving windows, changing doors, warped ceiling, distorted perspective, extra furniture in pathways, blurry, cartoon, wireframe, clay render, low quality, noise'
+    // Determine prompt sections included for diagnostic logging
+    const sectionsIncluded = [
+      'objective',
+      'reference_interpretation',
+      'structural_preservation',
+      'materials_pbr',
+      'lighting_environment',
+      'camera_composition',
+      'negative_constraints',
+    ]
+    if (options.refinementPrompt || refinementPrompt) sectionsIncluded.push('user_refinement')
+    if (category === 'exterior' && options.exteriorSettings?.storyboardShots?.length) {
+      sectionsIncluded.push('storyboard_composition')
     }
 
-    let providerRequest: Record<string, unknown> = {}
-    const buildExtras = (applied: RenderQuality, extra: Record<string, unknown> = {}) => ({
-      warnings,
-      audit,
-      effectiveSettings: effective.settings as Record<string, unknown>,
+    // 3. Prepare clean reference image buffer for Nano Banana 2.1
+    const preparedInitBuffer = await sharp(rawSourceBuffer)
+      .resize(1536, 1536, { fit: 'inside', withoutEnlargement: false })
+      .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+      .toBuffer()
+
+    const preparedMeta = await sharp(preparedInitBuffer).metadata()
+
+    // 4. Call Nano Banana 2.1 multimodal generateContent endpoint
+    const { buffer: generatedBuffer, providerRequestId, modelUsed } = await this.executeNanoBananaImageEdit({
+      requestId,
+      imageBuffer: preparedInitBuffer,
+      locationImageBuffer,
+      prompt: enhancedPrompt,
       negativePrompt: negativeConstraints,
-      quality: { requested: quality, applied },
-      providerRequest: { ...providerRequest, ...extra },
+      aspectRatio: targetAspect,
+      quality,
+      category,
+      normalizedSettings: effective.settings as Record<string, unknown>,
+      sectionsIncluded,
+      inputDimensions: { width: preparedMeta.width || origWidth, height: preparedMeta.height || origHeight },
     })
 
+    // 5. Save generated image output
     const fileName = `render-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    // 3. Cloud Neural Synthesis: Stability AI Structure ControlNet / SDXL Image-to-Image
-    const providerFailures: string[] = []
-    if (!env.STABILITY_API_KEY) {
-      providerFailures.push('No STABILITY_API_KEY is configured')
-    }
-    if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      // 3A. Primary SOTA Method: Stability AI Structure ControlNet (v2beta)
-      // This is the gold standard for architectural rendering: extracts edge/depth geometry from 3D models while synthesizing 100% realistic materials
-      const describeFailure = (label: string, status: number, body: string): string => {
-        if (status === 402 || status === 429) {
-          return `${label}: Stability AI account has insufficient credits (HTTP ${status}). Add credits at https://platform.stability.ai/dashboard/billing`
-        }
-        return `${label}: HTTP ${status} ${body.slice(0, 200)}`
-      }
+    const optimizedOutput = await sharp(generatedBuffer)
+      .jpeg({ quality: 96, mozjpeg: true })
+      .toBuffer()
 
-      /**
-       * Quality tiers map to real Stability upscale endpoints:
-       *   standard -> native structure output (about 1 megapixel, no upscale)
-       *   high     -> upscale/fast (neural 4x upscaler)
-       *   ultra    -> upscale/conservative (prompt-guided detail-preserving upscale, up to 4K)
-       * If an upscale step fails the native render is returned and a warning is recorded.
-       */
-      const applyQuality = async (aiBuffer: Buffer): Promise<{ buffer: Buffer; applied: RenderQuality }> => {
-        if (quality === 'standard') return { buffer: aiBuffer, applied: 'standard' }
-        const isUltra = quality === 'ultra'
-        const endpoint = isUltra
-          ? 'https://api.stability.ai/v2beta/stable-image/upscale/conservative'
-          : 'https://api.stability.ai/v2beta/stable-image/upscale/fast'
-        try {
-          const form = new FormData()
-          form.append('image', new Blob([aiBuffer], { type: 'image/jpeg' }), 'render.jpg')
-          form.append('output_format', 'jpeg')
-          if (isUltra) {
-            form.append('prompt', enhancedPrompt.slice(0, 4000))
-            form.append('negative_prompt', negativeConstraints.slice(0, 4000))
-            form.append('creativity', '0.25')
-          }
-          const upRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STABILITY_API_KEY}`, Accept: 'image/*' },
-            body: form,
-          })
-          if (upRes.ok) {
-            const upBuf = Buffer.from(await upRes.arrayBuffer())
-            if (upBuf.length > 5000) {
-              providerRequest = { ...providerRequest, upscaleEndpoint: endpoint.split('/v2beta/')[1] }
-              return { buffer: upBuf, applied: quality }
-            }
-          }
-          const body = upRes.ok ? 'empty response' : await upRes.text()
-          warnings.push(`${quality} quality upscale was not applied. ${describeFailure('Upscale', upRes.status, body)}. The native-resolution render is shown instead.`)
-        } catch (upErr) {
-          warnings.push(`${quality} quality upscale failed (${(upErr as Error).message}). The native-resolution render is shown instead.`)
-        }
-        return { buffer: aiBuffer, applied: 'standard' }
-      }
+    fs.writeFileSync(filePath, optimizedOutput)
+    console.log(`[ImageGen][${requestId}] Architectural synthesis complete via ${modelUsed}! Saved to ${relativeUrl}`)
 
-      try {
-        // control_strength: higher = the output follows the reference structure more strictly.
-        const controlStrength = renderingMode === 'preserve-structure'
-          ? String(Math.max(0.70, Math.min(0.82, (geometryStrength || 0.85) * 0.88)))
-          : renderingMode === 'realistic-enhancement'
-            ? '0.65'
-            : '0.50'
-        console.log(`[ImageGen] Invoking Stability AI ControlNet Structure API (control_strength: ${controlStrength}, quality: ${quality})...`)
-
-        const structurePrompt = enhancedPrompt.slice(0, 4000)
-        const structureFormData = new FormData()
-        structureFormData.append('image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'structure.jpg')
-        structureFormData.append('prompt', structurePrompt)
-        structureFormData.append('negative_prompt', negativeConstraints.slice(0, 4000))
-        structureFormData.append('control_strength', controlStrength)
-        structureFormData.append('output_format', 'jpeg')
-
-        providerRequest = {
-          provider: 'stability-ai',
-          endpoint: 'v2beta/stable-image/control/structure',
-          imageSent: true,
-          control_strength: Number(controlStrength),
-          promptSent: true,
-          negativePromptSent: true,
-          inputSize: `${targetWidth}x${targetHeight}`,
-        }
-
-        const structRes = await fetch('https://api.stability.ai/v2beta/stable-image/control/structure', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-            Accept: 'image/*',
-          },
-          body: structureFormData,
-        })
-
-        if (structRes.ok) {
-          const rawBuffer = Buffer.from(await structRes.arrayBuffer())
-          if (rawBuffer.length > 5000) {
-            const upscaled = await applyQuality(rawBuffer)
-            const optimized = await sharp(upscaled.buffer)
-              .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-              .toBuffer()
-            fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] Stability AI Structure synthesis complete! Saved ${relativeUrl}`)
-            return {
-              imageUrl: relativeUrl,
-              sourceImageUrl: sourceUrl,
-              locationImageUrl,
-              enhancedPrompt,
-              provider: `stability-structure-${renderingMode}`,
-              aspectRatio: targetAspect,
-              ...buildExtras(upscaled.applied),
-            }
-          }
-          providerFailures.push('Structure ControlNet returned an empty image')
-        } else {
-          const errText = await structRes.text()
-          console.warn('[ImageGen] Stability AI Structure API response error:', structRes.status, errText)
-          providerFailures.push(describeFailure('Structure ControlNet', structRes.status, errText))
-        }
-      } catch (structErr) {
-        console.warn('[ImageGen] Stability Structure endpoint skipped/failed:', structErr)
-        providerFailures.push(`Structure ControlNet failed: ${(structErr as Error).message}`)
-      }
-
-
-      // 3B. Secondary Method: SDXL Image-to-Image with calibrated preservation strength
-      // Note: In Stability SDXL API, image_strength represents PRESERVATION STRENGTH (1.0 = keep original, 0.0 = replace).
-      // For untextured 3D models/blockouts, a value of 0.58-0.62 preserves building envelope and perspective while providing 40% denoising latitude to synthesize PBR materials.
-      try {
-        let effectiveStrength = 0.60
-        let cfgScale = '8.0'
-
-        if (renderingMode === 'preserve-structure') {
-          // 0.60 preservation: locks floor count, openings, and roofline while converting clay/wireframe into physical finishes
-          effectiveStrength = Math.max(0.55, Math.min(0.68, (geometryStrength || 0.85) * 0.72))
-          cfgScale = '8.5'
-        } else if (renderingMode === 'realistic-enhancement') {
-          effectiveStrength = 0.50
-          cfgScale = '7.5'
-        } else if (renderingMode === 'creative-redesign') {
-          effectiveStrength = 0.38
-          cfgScale = '7.0'
-        }
-
-        console.log(`[ImageGen] Transforming architectural model with Stability AI SDXL img2img (${renderingMode}, calibrated preservation strength: ${effectiveStrength.toFixed(2)})...`)
-
-        // SDXL v1 accepts ~2000 chars of prompt; use the same resolved prompt (no hidden style defaults).
-        const formData = new FormData()
-        formData.append('init_image', new Blob([preparedInitBuffer], { type: 'image/jpeg' }), 'init.jpg')
-        formData.append('init_image_mode', 'IMAGE_STRENGTH')
-        formData.append('image_strength', String(effectiveStrength))
-        formData.append('text_prompts[0][text]', enhancedPrompt.slice(0, 2000))
-        formData.append('text_prompts[0][weight]', '1')
-        formData.append('text_prompts[1][text]', negativeConstraints)
-        formData.append('text_prompts[1][weight]', '-1')
-        formData.append('cfg_scale', cfgScale)
-        formData.append('samples', '1')
-        formData.append('steps', '25')
-
-        const response = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          },
-        )
-
-        if (response.ok) {
-          const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-          const b64 = data?.artifacts?.[0]?.base64
-          if (b64) {
-            providerRequest = {
-              provider: 'stability-ai',
-              endpoint: 'v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-              imageSent: true,
-              image_strength: effectiveStrength,
-              cfg_scale: Number(cfgScale),
-              promptSent: true,
-              negativePromptSent: true,
-            }
-            warnings.push(`Structure ControlNet was unavailable (${providerFailures.join('; ')}). SDXL image-to-image was used instead; it follows the original geometry less precisely.`)
-            const upscaled = await applyQuality(Buffer.from(b64, 'base64'))
-            const optimized = await sharp(upscaled.buffer)
-              .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
-              .toBuffer()
-            fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] Stability AI SDXL synthesis complete! Saved ${relativeUrl}`)
-            return {
-              imageUrl: relativeUrl,
-              sourceImageUrl: sourceUrl,
-              locationImageUrl,
-              enhancedPrompt,
-              provider: `stability-sdxl-${renderingMode}`,
-              aspectRatio: targetAspect,
-              ...buildExtras(upscaled.applied),
-            }
-          }
-          providerFailures.push('SDXL image-to-image returned no image')
-        } else {
-          const errText = await response.text()
-          console.warn('[ImageGen] Stability AI SDXL API response error:', response.status, errText)
-          providerFailures.push(describeFailure('SDXL image-to-image', response.status, errText))
-        }
-      } catch (err) {
-        console.error('[ImageGen] Stability AI image-to-image failed:', err)
-        providerFailures.push(`SDXL image-to-image failed: ${(err as Error).message}`)
-      }
+    const providerRequest = {
+      provider: 'gemini-nano-banana-2.1',
+      endpoint: `/v1beta/models/${modelUsed}:generateContent`,
+      model: modelUsed,
+      imageSent: true,
+      locationImageSent: Boolean(locationImageBuffer),
+      qualitySent: this.mapQualityToNanoBananaSize(quality),
+      aspectRatioSent: targetAspect,
+      providerRequestId,
+      inputSize: `${preparedMeta.width}x${preparedMeta.height}`,
     }
 
-    // 3C. No AI render was produced. Do NOT silently hand back a fake "render".
-    if (process.env.AI_ALLOW_LOCAL_FALLBACK !== 'true') {
-      const reason = providerFailures.length ? providerFailures.join(' | ') : 'AI provider is disabled (AI_IMAGE_PROVIDER)'
-      throw new HttpError(
-        503,
-        `AI rendering is currently unavailable, so no render was created. ${reason}`,
-        'AI_PROVIDER_UNAVAILABLE',
-      )
-    }
-    warnings.push(`AI rendering failed (${providerFailures.join('; ')}). This is a basic non-AI colour/lighting adjustment, NOT a photorealistic render.`)
-    providerRequest = { provider: 'local-fallback', imageSent: false, note: 'No neural model was used' }
-
-    // 4. Vibe3D Structural Architecture Neural Engine (Guarantees 100% Geometric Match & Zero Hallucinations)
-    try {
-      console.log(`[ImageGen] Synthesizing structural architectural render (${category}, ${renderingMode}, ${style}, ${effectiveLighting})...`)
-
-      const { data, info } = await sharp(preparedInitBuffer).raw().toBuffer({ resolveWithObject: true })
-      const width = info.width
-      const height = info.height
-      const channels = info.channels
-
-      const { hasExternalBackground, isBackground } = this.segmentExternalBackground(data, width, height, channels)
-
-      if (category === 'exterior' && hasExternalBackground) {
-        // A. Generate Atmospheric Sky & Ground Shadow Plates
-        const skyImage = await this.generateAtmospherePlate(width, height, effectiveLighting)
-        const shadowImage = await this.generateGroundShadow(width, height)
-
-        // B. Process building materials, lighting, and textures
-        const buildingRgba = Buffer.alloc(width * height * 4)
-
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const i = y * width + x
-            const idx = i * 4
-
-            if (isBackground[i]) {
-              buildingRgba[idx + 3] = 0 // Transparent outside building
-              continue
-            }
-
-            let r = data[i * channels]
-            let g = data[i * channels + 1]
-            let b = data[i * channels + 2]
-
-            const brightness = (r + g + b) / 3
-            const isWood = r > b + 20 && g > b + 8 && brightness < 210
-            const isInterior = y > height * 0.20 && y < height * 0.70 && x > width * 0.30 && x < width * 0.88
-
-            if (isWood) {
-              // Teak / cedar wood grain enhancement with natural warmth
-              r = Math.min(255, Math.round(r * 1.14 + 14))
-              g = Math.min(255, Math.round(g * 1.06 + 6))
-              b = Math.max(0, Math.round(b * 0.88 - 6))
-            } else if (isInterior && brightness > 120 && brightness < 235) {
-              // Warm 3000K architectural interior lighting
-              r = Math.min(255, Math.round(r * 1.12 + 16))
-              g = Math.min(255, Math.round(g * 1.08 + 10))
-              b = Math.min(255, Math.round(b * 0.94 - 4))
-            } else if (brightness > 200) {
-              // Architectural concrete / limestone / white masonry sun radiance
-              if (effectiveLighting === 'golden-hour') {
-                r = Math.min(255, Math.round(r * 1.04 + 6))
-                g = Math.min(255, Math.round(g * 1.01 + 2))
-                b = Math.max(0, Math.round(b * 0.96 - 4))
-              } else if (effectiveLighting === 'dusk' || effectiveLighting === 'night') {
-                r = Math.max(0, Math.round(r * 0.90 - 4))
-                g = Math.max(0, Math.round(g * 0.92 - 2))
-                b = Math.min(255, Math.round(b * 0.98 + 4))
-              }
-            } else if (brightness < 70) {
-              // Architectural dark bronze / graphite window frames
-              r = Math.min(255, Math.round(r + 14))
-              g = Math.min(255, Math.round(g + 16))
-              b = Math.min(255, Math.round(b + 22))
-            }
-
-            buildingRgba[idx] = r
-            buildingRgba[idx + 1] = g
-            buildingRgba[idx + 2] = b
-            buildingRgba[idx + 3] = 255
-          }
-        }
-
-        const buildingImage = await sharp(buildingRgba, { raw: { width, height, channels: 4 } }).png().toBuffer()
-
-        await sharp(skyImage)
-          .composite([
-            { input: shadowImage, blend: 'over' },
-            { input: buildingImage, blend: 'over' },
-          ])
-          .sharpen({ sigma: 1.1, m1: 0.9, m2: 2.2 })
-          .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
-          .toFile(filePath)
-      } else {
-        // C. Full-canvas processing (for interior rooms or photos without plain white background)
-        // Preserves 100% of the room walls, windows, doors, ceiling, and existing furniture!
-        let modulated = sharp(preparedInitBuffer)
-
-        if (effectiveLighting === 'golden-hour') {
-          modulated = modulated.modulate({ brightness: 1.04, saturation: 1.22, hue: -3 })
-        } else if (effectiveLighting === 'daylight') {
-          modulated = modulated.modulate({ brightness: 1.06, saturation: 1.08 })
-        } else if (effectiveLighting === 'dusk') {
-          modulated = modulated.modulate({ brightness: 0.92, saturation: 1.15, hue: 10 })
-        } else if (effectiveLighting === 'overcast') {
-          modulated = modulated.modulate({ brightness: 1.02, saturation: 0.95 })
-        } else if (effectiveLighting === 'night') {
-          modulated = modulated.modulate({ brightness: 0.85, saturation: 1.20, hue: 14 })
-        }
-
-        const adherence = renderingMode === 'preserve-structure' ? 1.06 : renderingMode === 'realistic-enhancement' ? 1.12 : 1.18
-        const contrastBias = renderingMode === 'preserve-structure' ? -6 : -14
-
-        const finalBuffer = await modulated
-          .linear(adherence, contrastBias)
-          .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-          .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
-          .toBuffer()
-
-        fs.writeFileSync(filePath, finalBuffer)
-      }
-
-      console.log(`[ImageGen] Vibe3D structural render complete! Saved ${relativeUrl}`)
-
-      return {
-        imageUrl: relativeUrl,
-        sourceImageUrl: sourceUrl,
-        locationImageUrl,
-        enhancedPrompt,
-        provider: `vibe3d-structural-${renderingMode}`,
-        aspectRatio: targetAspect,
-        ...buildExtras('standard'),
-      }
-    } catch (err) {
-      console.error('[ImageGen] Structural rendering failed, saving optimized source as fallback:', err)
-      await sharp(preparedInitBuffer)
-        .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-        .jpeg({ quality: 95 })
-        .toFile(filePath)
-
-      return {
-        imageUrl: relativeUrl,
-        sourceImageUrl: sourceUrl,
-        locationImageUrl,
-        enhancedPrompt,
-        provider: 'renderly-source-preserved',
-        aspectRatio: targetAspect,
-        ...buildExtras('standard'),
-      }
+    return {
+      imageUrl: relativeUrl,
+      sourceImageUrl: sourceUrl,
+      locationImageUrl,
+      enhancedPrompt,
+      provider: modelUsed,
+      aspectRatio: targetAspect,
+      warnings,
+      audit,
+      effectiveSettings: effective.settings as Record<string, unknown>,
+      negativePrompt: negativeConstraints,
+      quality: { requested: quality, applied: quality },
+      providerRequest,
     }
   }
 
   /**
-   * Text-only prompt generation (maintained for compatibility)
+   * Text-to-image prompt generation via Gemini Nano Banana 2.1
    */
   public static async generateRender(options: GenerateImageOptions): Promise<GenerateImageResult> {
     const { prompt, style, aspectRatio } = options
-    const styleKeywords = STYLE_ENHANCERS[style] ?? STYLE_ENHANCERS['modern-luxury']
-    const enhancedPrompt = `${prompt.trim()}, ${styleKeywords}`
-    const { width, height, openaiSize } = ASPECT_DIMENSIONS[aspectRatio] ?? ASPECT_DIMENSIONS['16:9']
     const { rendersDir } = this.ensureDirs()
-    const fileName = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
+    const apiKey = this.getApiKey()
+    const model = this.getModelName()
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    const enhancedPrompt = `${prompt}, ${style} architecture, professional architectural photography, 8k resolution, photorealistic masterpiece`
+
+    console.log(`[ImageGen] Generating architectural render via Nano Banana 2.1 (${model})...`)
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: enhancedPrompt }],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          imageConfig: {
+            aspectRatio: aspectRatio || '16:9',
+            imageSize: '2K',
+          },
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      if (response.status === 401 || response.status === 403) {
+        throw new HttpError(401, 'Invalid Gemini Nano Banana 2.1 API key. Check backend/.env.', 'GEMINI_AUTH_ERROR')
+      }
+      if (response.status === 429) {
+        throw new HttpError(
+          429,
+          'Gemini Nano Banana 2.1 quota is exhausted. Please check your quota at https://aistudio.google.com/apikey',
+          'GEMINI_QUOTA_EXHAUSTED',
+        )
+      }
+      throw new HttpError(response.status, `Nano Banana 2.1 generation failed: ${errText}`, 'GEMINI_GENERATION_FAILED')
+    }
+
+    const data = (await response.json()) as GeminiGenerateContentResponse
+    const buffer = this.extractImageFromGeminiResponse(data)
+
+    if (!buffer) {
+      throw new HttpError(502, 'Nano Banana 2.1 generation returned an empty response.', 'GEMINI_EMPTY_RESPONSE')
+    }
+
+    const fileName = `render-gen-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    // 1. OpenAI DALL-E 3
-    if (env.OPENAI_API_KEY && (env.AI_IMAGE_PROVIDER === 'openai' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      try {
-        console.log(`[ImageGen] Generating architectural render via OpenAI DALL-E 3...`)
-        const response = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'dall-e-3',
-            prompt: enhancedPrompt.slice(0, 4000),
-            n: 1,
-            size: openaiSize,
-            quality: 'standard',
-          }),
-        })
+    await sharp(buffer).jpeg({ quality: 96, mozjpeg: true }).toFile(filePath)
 
-        if (response.ok) {
-          const data = (await response.json()) as { data?: Array<{ url: string }> }
-          const remoteUrl = data?.data?.[0]?.url
-          if (remoteUrl) {
-            const imgRes = await fetch(remoteUrl)
-            if (imgRes.ok) {
-              const buffer = Buffer.from(await imgRes.arrayBuffer())
-              fs.writeFileSync(filePath, buffer)
-              return { imageUrl: relativeUrl, enhancedPrompt, provider: 'openai-dalle-3', aspectRatio }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[ImageGen] OpenAI generation failed:', err)
-      }
-    }
-
-    // 2. Stability AI text-to-image
-    if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      try {
-        console.log(`[ImageGen] Generating architectural render via Stability AI...`)
-        const response = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json',
-              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-            },
-            body: JSON.stringify({
-              text_prompts: [{ text: enhancedPrompt, weight: 1 }],
-              cfg_scale: 7,
-              height,
-              width,
-              samples: 1,
-              steps: 30,
-            }),
-          },
-        )
-
-        if (response.ok) {
-          const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-          const b64 = data?.artifacts?.[0]?.base64
-          if (b64) {
-            fs.writeFileSync(filePath, Buffer.from(b64, 'base64'))
-            return { imageUrl: relativeUrl, enhancedPrompt, provider: 'stability-sdxl', aspectRatio }
-          }
-        }
-      } catch (err) {
-        console.error('[ImageGen] Stability AI generation failed:', err)
-      }
-    }
-
-    // 3. FLUX
-    try {
-      const seed = Math.floor(Math.random() * 9999999)
-      const encodedPrompt = encodeURIComponent(enhancedPrompt)
-      const fluxUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux&nologo=true&seed=${seed}`
-      const response = await fetch(fluxUrl)
-      if (response.ok) {
-        const buffer = Buffer.from(await response.arrayBuffer())
-        if (buffer.length > 1000) {
-          fs.writeFileSync(filePath, buffer)
-          return { imageUrl: relativeUrl, enhancedPrompt, provider: 'flux-architecture', aspectRatio }
-        }
-      }
-    } catch (err) {
-      console.warn('[ImageGen] FLUX fallback failed:', err)
-    }
-
-    const fallbackImage = FALLBACK_STYLES[style] || '/images/hero-villa.png'
     return {
-      imageUrl: fallbackImage,
+      imageUrl: relativeUrl,
       enhancedPrompt,
-      provider: 'renderly-preset',
+      provider: model,
       aspectRatio,
     }
   }
 
   /**
-   * AI-powered post-render editing & inpainting
-   * Takes an existing render and applies targeted material/lighting/furniture modifications
-   * while strictly preserving perspective, layout, and structure.
+   * Applies targeted post-render modifications via Gemini Nano Banana 2.1
    */
   public static async editRender(options: {
     image: string
@@ -1130,101 +723,45 @@ export class ImageGenerationService {
     lighting?: RenderLighting
     aspectRatio?: RenderAspectRatio
   }): Promise<{ imageUrl: string; enhancedPrompt: string; provider: string }> {
-    const {
-      image,
-      editPrompt,
-      strength = 0.32,
-      style = 'modern-luxury',
-      engine = 'hyperreal',
-      lighting = 'golden-hour',
-      aspectRatio = '16:9',
-    } = options
-
+    const { image, editPrompt, aspectRatio = '16:9' } = options
+    const requestId = `edit-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
     const { rendersDir } = this.ensureDirs()
+
     const { buffer: rawSourceBuffer, detectedAspect } = await this.resolveSourceImage(image)
     const targetAspect = aspectRatio || detectedAspect
-    const { width, height } = STABILITY_DIMENSIONS[targetAspect] || STABILITY_DIMENSIONS['16:9']
 
     const preparedBuffer = await sharp(rawSourceBuffer)
-      .resize(width, height, { fit: 'cover' })
+      .resize(1536, 1536, { fit: 'inside' })
       .jpeg({ quality: 95 })
       .toBuffer()
 
-    const baseRealism = this.buildRealismPrompt({ style, engine, lighting })
-    const editEnhancedPrompt = `${editPrompt.trim()}, maintaining exact architectural perspective and structural massing, ${baseRealism}`
+    const editEnhancedPrompt = `Modify the architectural render according to these instructions: ${editPrompt.trim()}. Maintain identical building geometry, floor count, roofline, perspective, and untouched structural elements.`
+
+    const { buffer: editedBuffer, modelUsed } = await this.executeNanoBananaImageEdit({
+      requestId,
+      imageBuffer: preparedBuffer,
+      prompt: editEnhancedPrompt,
+      aspectRatio: targetAspect,
+      quality: 'high',
+      category: 'exterior',
+      sectionsIncluded: ['edit_directive', 'structural_preservation'],
+    })
 
     const fileName = `render-edit-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      try {
-        console.log(`[ImageGen] Applying targeted AI edit (${strength}): "${editPrompt}"...`)
-        const formData = new FormData()
-        formData.append('init_image', new Blob([preparedBuffer], { type: 'image/jpeg' }), 'init.jpg')
-        formData.append('init_image_mode', 'IMAGE_STRENGTH')
-        formData.append('image_strength', String(Math.max(0.18, Math.min(0.55, strength))))
-        formData.append('text_prompts[0][text]', editEnhancedPrompt.slice(0, 2000))
-        formData.append('text_prompts[0][weight]', '1')
-        formData.append(
-          'text_prompts[1][text]',
-          'blurry, distorted geometry, cartoon, low quality, noise, artifacts, extra limbs, bad perspective',
-        )
-        formData.append('text_prompts[1][weight]', '-1')
-        formData.append('cfg_scale', '7.5')
-        formData.append('samples', '1')
-        formData.append('steps', '35')
+    await sharp(editedBuffer).jpeg({ quality: 96, mozjpeg: true }).toFile(filePath)
 
-        const response = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          },
-        )
-
-        if (response.ok) {
-          const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-          const b64 = data?.artifacts?.[0]?.base64
-          if (b64) {
-            const optimized = await sharp(Buffer.from(b64, 'base64'))
-              .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-              .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
-              .toBuffer()
-            fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] Edit saved: ${relativeUrl}`)
-            return {
-              imageUrl: relativeUrl,
-              enhancedPrompt: editEnhancedPrompt,
-              provider: 'stability-sdxl-edit',
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[ImageGen] Stability edit failed, falling back:', err)
-      }
-    }
-
-    // Graceful fallback: save modified image with sharp subtle grading
-    const adjusted = await sharp(preparedBuffer)
-      .modulate({ brightness: 1.02, saturation: 1.08 })
-      .jpeg({ quality: 95 })
-      .toBuffer()
-    fs.writeFileSync(filePath, adjusted)
     return {
       imageUrl: relativeUrl,
       enhancedPrompt: editEnhancedPrompt,
-      provider: 'renderly-edit-fallback',
+      provider: `${modelUsed}-edit`,
     }
   }
 
   /**
-   * Vibe3D Instant Relight Feature:
-   * Re-illuminates an architectural render by recalculating natural light and artificial lighting sources.
+   * Re-illuminates an architectural render using Gemini Nano Banana 2.1
    */
   public static async relightRender(options: {
     image: string
@@ -1248,13 +785,13 @@ export class ImageGenerationService {
       aspectRatio = '16:9',
     } = options
 
+    const requestId = `relight-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
     const { rendersDir } = this.ensureDirs()
     const { buffer: rawSourceBuffer, detectedAspect } = await this.resolveSourceImage(image)
     const targetAspect = aspectRatio || detectedAspect
-    const { width, height } = STABILITY_DIMENSIONS[targetAspect] || STABILITY_DIMENSIONS['16:9']
 
     const preparedBuffer = await sharp(rawSourceBuffer)
-      .resize(width, height, { fit: 'cover' })
+      .resize(1536, 1536, { fit: 'inside' })
       .jpeg({ quality: 95 })
       .toBuffer()
 
@@ -1275,179 +812,85 @@ export class ImageGenerationService {
     const tempDesc = tempDescriptions[colorTemp] || tempDescriptions.warm
 
     const artificialParts: string[] = []
-    if (directLights) artificialParts.push('direct ceiling downlights turned on casting warm light onto surfaces')
-    if (indirectLights) artificialParts.push('hidden linear LED cove lighting illuminating architectural soffits and cornices')
-    if (exteriorLights) artificialParts.push('exterior spotlights grazing textured walls, garden uplights, and pool glow')
-    if (!directLights && !indirectLights && !exteriorLights) artificialParts.push('all artificial fixtures turned off, lit only by ambient natural light')
+    if (directLights) artificialParts.push('direct architectural ceiling downlights turned on casting warm pools of light')
+    if (indirectLights) artificialParts.push('hidden linear LED cove lighting illuminating architectural soffits and ceiling coves')
+    if (exteriorLights) artificialParts.push('exterior spotlights grazing textured walls, garden uplights, and pool illumination')
+    if (!directLights && !indirectLights && !exteriorLights) {
+      artificialParts.push('all artificial fixtures turned off, lit only by ambient natural light')
+    }
 
-    const relightPrompt = `relighted architectural scene, exact geometry and materials preserved, ${naturalSunDesc}, natural light intensity ${naturalIntensity.toFixed(1)}, ${tempDesc}, ${artificialParts.join(', ')}, photorealistic architectural lighting design, ray-traced shadows and light bounce, ArchDaily quality`
+    const relightPrompt = `Re-illuminate this architectural scene while keeping all building geometry, materials, and camera perspective 100% identical. Lighting design: ${naturalSunDesc}, natural intensity ${naturalIntensity.toFixed(1)}, color balance ${tempDesc}, ${artificialParts.join(', ')}. Accurate global illumination bounce, contact shadows, and realistic reflections.`
+
+    const { buffer: relitBuffer, modelUsed } = await this.executeNanoBananaImageEdit({
+      requestId,
+      imageBuffer: preparedBuffer,
+      prompt: relightPrompt,
+      aspectRatio: targetAspect,
+      quality: 'high',
+      category: 'exterior',
+      sectionsIncluded: ['relighting_specification', 'structural_preservation'],
+    })
 
     const fileName = `render-relit-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      try {
-        console.log(`[ImageGen] Synthesizing Vibe3D Relight (${timeOfDay}, ${colorTemp})...`)
-        const formData = new FormData()
-        formData.append('init_image', new Blob([preparedBuffer], { type: 'image/jpeg' }), 'init.jpg')
-        formData.append('init_image_mode', 'IMAGE_STRENGTH')
-        formData.append('image_strength', '0.34')
-        formData.append('text_prompts[0][text]', relightPrompt.slice(0, 2000))
-        formData.append('text_prompts[0][weight]', '1')
-        formData.append('text_prompts[1][text]', 'distorted walls, bad perspective, cartoon, noise, artifacts, blurry, warped geometry')
-        formData.append('text_prompts[1][weight]', '-1')
-        formData.append('cfg_scale', '7.0')
-        formData.append('samples', '1')
-        formData.append('steps', '35')
-
-        const response = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          },
-        )
-
-        if (response.ok) {
-          const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-          const b64 = data?.artifacts?.[0]?.base64
-          if (b64) {
-            const optimized = await sharp(Buffer.from(b64, 'base64'))
-              .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-              .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
-              .toBuffer()
-            fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] Relit render saved: ${relativeUrl}`)
-            return {
-              imageUrl: relativeUrl,
-              enhancedPrompt: relightPrompt,
-              provider: 'stability-sdxl-relight',
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[ImageGen] Stability Relight failed, applying fallback:', err)
-      }
-    }
-
-    // High quality color-temperature fallback modulation
-    let pipeline = sharp(preparedBuffer)
-    if (colorTemp === 'warm') {
-      pipeline = pipeline.modulate({ brightness: 1.03, saturation: 1.15 })
-    } else if (colorTemp === 'cool') {
-      pipeline = pipeline.modulate({ brightness: 0.98, saturation: 0.92 })
-    }
-    const fallbackBuffer = await pipeline
-      .sharpen({ sigma: 1.0, m1: 0.8, m2: 2.0 })
-      .jpeg({ quality: 95 })
-      .toBuffer()
-    fs.writeFileSync(filePath, fallbackBuffer)
+    await sharp(relitBuffer).jpeg({ quality: 96, mozjpeg: true }).toFile(filePath)
 
     return {
       imageUrl: relativeUrl,
       enhancedPrompt: relightPrompt,
-      provider: 'renderly-relight-engine',
+      provider: `${modelUsed}-relight`,
     }
   }
 
   /**
-   * Vibe3D HyperReal Enhance:
-   * Upgrades a draft or completed render to 8K studio portfolio quality with micro-texture roughness and ray-traced reflections.
+   * Enhances an existing render to master 4K quality using Gemini Nano Banana 2.1
    */
   public static async enhanceToHyperReal(options: {
     image: string
     style?: RenderStyle
     aspectRatio?: RenderAspectRatio
   }): Promise<{ imageUrl: string; enhancedPrompt: string; provider: string }> {
-    const { image, aspectRatio = '16:9' } = options
+    const { image, aspectRatio } = options
+    const requestId = `enhance-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
     const { rendersDir } = this.ensureDirs()
     const { buffer: rawSourceBuffer, detectedAspect } = await this.resolveSourceImage(image)
     const targetAspect = aspectRatio || detectedAspect
-    const { width, height } = STABILITY_DIMENSIONS[targetAspect] || STABILITY_DIMENSIONS['16:9']
 
     const preparedBuffer = await sharp(rawSourceBuffer)
-      .resize(width, height, { fit: 'cover' })
+      .resize(1536, 1536, { fit: 'inside' })
       .jpeg({ quality: 95 })
       .toBuffer()
 
     const hyperrealPrompt =
-      'Vibe3D HyperReal Master Studio render, award-winning architectural photography, Hasselblad H6D-100c 100MP optical clarity, micro-surface material porosity, honed limestone, low-iron glass reflections, ArchDaily building of the year, ultra-sharp detail, ray-traced caustics, architectural perfection'
+      'Enhance this architectural render to master portfolio quality: render authentic micro-surface material porosity, honed stone textures, realistic wood grain, crystalline glass reflections, ray-traced caustics, and clean ambient occlusion, while keeping building geometry, openings, and perspective 100% locked.'
+
+    const { buffer: enhancedBuffer, modelUsed } = await this.executeNanoBananaImageEdit({
+      requestId,
+      imageBuffer: preparedBuffer,
+      prompt: hyperrealPrompt,
+      aspectRatio: targetAspect,
+      quality: 'ultra',
+      category: 'exterior',
+      sectionsIncluded: ['hyperreal_enhancement', 'geometric_preservation'],
+    })
 
     const fileName = `render-hyperreal-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.jpg`
     const filePath = path.join(rendersDir, fileName)
     const relativeUrl = `/uploads/renders/${fileName}`
 
-    if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-      try {
-        console.log(`[ImageGen] Upgrading render to HyperReal Studio Quality...`)
-        const formData = new FormData()
-        formData.append('init_image', new Blob([preparedBuffer], { type: 'image/jpeg' }), 'init.jpg')
-        formData.append('init_image_mode', 'IMAGE_STRENGTH')
-        formData.append('image_strength', '0.24')
-        formData.append('text_prompts[0][text]', hyperrealPrompt)
-        formData.append('text_prompts[0][weight]', '1')
-        formData.append('text_prompts[1][text]', 'blur, low quality, cartoon, noise, artifacts, distorted lines')
-        formData.append('text_prompts[1][weight]', '-1')
-        formData.append('cfg_scale', '7.0')
-        formData.append('samples', '1')
-        formData.append('steps', '38')
-
-        const response = await fetch(
-          'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          },
-        )
-
-        if (response.ok) {
-          const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-          const b64 = data?.artifacts?.[0]?.base64
-          if (b64) {
-            const optimized = await sharp(Buffer.from(b64, 'base64'))
-              .sharpen({ sigma: 1.2, m1: 1.0, m2: 2.2 })
-              .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
-              .toBuffer()
-            fs.writeFileSync(filePath, optimized)
-            console.log(`[ImageGen] HyperReal render saved: ${relativeUrl}`)
-            return {
-              imageUrl: relativeUrl,
-              enhancedPrompt: hyperrealPrompt,
-              provider: 'stability-hyperreal-engine',
-            }
-          }
-        }
-      } catch (err) {
-        console.error('[ImageGen] HyperReal enhance failed:', err)
-      }
-    }
-
-    const enhancedBuffer = await sharp(preparedBuffer)
-      .sharpen({ sigma: 1.4, m1: 1.2, m2: 2.8 })
-      .modulate({ brightness: 1.02, saturation: 1.06 })
-      .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
-      .toBuffer()
-    fs.writeFileSync(filePath, enhancedBuffer)
+    await sharp(enhancedBuffer).jpeg({ quality: 98, mozjpeg: true }).toFile(filePath)
 
     return {
       imageUrl: relativeUrl,
       enhancedPrompt: hyperrealPrompt,
-      provider: 'renderly-hyperreal-enhancer',
+      provider: `${modelUsed}-hyperreal`,
     }
   }
 
   /**
-   * Vibe3D Close-Ups Feature:
-   * Generates macro architectural close-up detail shots from selected pinned targets on the render.
+   * Generates macro architectural close-up detail shots from selected pinned targets on the render
    */
   public static async generateCloseups(options: {
     image: string
@@ -1468,6 +911,7 @@ export class ImageGenerationService {
     const { image, targets } = options
     const { rendersDir } = this.ensureDirs()
     const { buffer: rawSourceBuffer, width: origW, height: origH } = await this.resolveSourceImage(image)
+    const model = this.getModelName()
 
     const closeups: Array<{ id: string; label: string; imageUrl: string }> = []
     const croppedBuffers: Buffer[] = []
@@ -1482,66 +926,40 @@ export class ImageGenerationService {
       const cropped = await sharp(rawSourceBuffer)
         .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
         .resize(1024, 1024, { fit: 'cover' })
+        .jpeg({ quality: 95 })
         .toBuffer()
 
-      const detailPrompt = `Macro architectural close-up detail of ${target.label || 'architectural material'}, ${target.note || ''}, extreme tactile micro-texture, luxury craftsmanship, Hasselblad 120mm macro lens, shallow depth of field, 8k resolution, ArchDaily feature`
+      const detailPrompt = `Macro architectural close-up photograph of ${target.label || 'architectural material'}, ${target.note || ''}. Extreme tactile micro-texture, fine joints, material porosity, realistic craftsmanship, shallow depth of field, Hasselblad macro lens optical clarity.`
+
+      const requestId = `closeup-${Date.now()}-${i}`
+      let macroBuffer: Buffer
+
+      try {
+        const { buffer } = await this.executeNanoBananaImageEdit({
+          requestId,
+          imageBuffer: cropped,
+          prompt: detailPrompt,
+          aspectRatio: '1:1',
+          quality: 'high',
+          category: 'exterior',
+          sectionsIncluded: ['macro_detail_specification'],
+        })
+        macroBuffer = buffer
+      } catch (err) {
+        throw new HttpError(
+          (err as HttpError).status || 500,
+          `Failed to synthesize closeup detail for "${target.label}": ${(err as Error).message}`,
+          'CLOSEUP_SYNTHESIS_FAILED',
+        )
+      }
 
       const fileName = `render-closeup-${Date.now()}-${i}-${crypto.randomBytes(4).toString('hex')}.jpg`
       const filePath = path.join(rendersDir, fileName)
       const relativeUrl = `/uploads/renders/${fileName}`
 
-      let generated = false
-      if (env.STABILITY_API_KEY && (env.AI_IMAGE_PROVIDER === 'stability' || env.AI_IMAGE_PROVIDER === 'auto')) {
-        try {
-          const formData = new FormData()
-          formData.append('init_image', new Blob([cropped], { type: 'image/jpeg' }), 'init.jpg')
-          formData.append('init_image_mode', 'IMAGE_STRENGTH')
-          formData.append('image_strength', '0.28')
-          formData.append('text_prompts[0][text]', detailPrompt)
-          formData.append('text_prompts[0][weight]', '1')
-          formData.append('text_prompts[1][text]', 'blurry, noise, low quality, artifacts')
-          formData.append('text_prompts[1][weight]', '-1')
-          formData.append('cfg_scale', '7.0')
-          formData.append('samples', '1')
-          formData.append('steps', '32')
-
-          const response = await fetch(
-            'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image',
-            {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${env.STABILITY_API_KEY}`, Accept: 'application/json' },
-              body: formData,
-            },
-          )
-
-          if (response.ok) {
-            const data = (await response.json()) as { artifacts?: Array<{ base64: string }> }
-            const b64 = data?.artifacts?.[0]?.base64
-            if (b64) {
-              const macroBuffer = await sharp(Buffer.from(b64, 'base64'))
-                .sharpen({ sigma: 1.1, m1: 0.9, m2: 2.0 })
-                .jpeg({ quality: 96, chromaSubsampling: '4:4:4' })
-                .toBuffer()
-              fs.writeFileSync(filePath, macroBuffer)
-              croppedBuffers.push(macroBuffer)
-              closeups.push({ id: `closeup-${i + 1}`, label: target.label || `Detail #${i + 1}`, imageUrl: relativeUrl })
-              generated = true
-            }
-          }
-        } catch (err) {
-          console.warn('[ImageGen] Closeup generation failed, using optimized crop:', err)
-        }
-      }
-
-      if (!generated) {
-        const macroBuffer = await sharp(cropped)
-          .sharpen({ sigma: 1.3, m1: 1.0, m2: 2.5 })
-          .jpeg({ quality: 96 })
-          .toBuffer()
-        fs.writeFileSync(filePath, macroBuffer)
-        croppedBuffers.push(macroBuffer)
-        closeups.push({ id: `closeup-${i + 1}`, label: target.label || `Detail #${i + 1}`, imageUrl: relativeUrl })
-      }
+      await sharp(macroBuffer).jpeg({ quality: 96, mozjpeg: true }).toFile(filePath)
+      croppedBuffers.push(macroBuffer)
+      closeups.push({ id: `closeup-${i + 1}`, label: target.label || `Detail #${i + 1}`, imageUrl: relativeUrl })
     }
 
     let collageUrl = closeups[0]?.imageUrl || ''
@@ -1582,12 +1000,12 @@ export class ImageGenerationService {
     return {
       closeups,
       collageUrl,
-      provider: 'vibe3d-closeup-engine',
+      provider: `${model}-closeup`,
     }
   }
 
   /**
-   * Saves a canvas-adjusted / color-graded image
+   * Saves a canvas-adjusted / color-graded image (user manual edits)
    */
   public static async saveAdjustedImage(dataUrl: string): Promise<string> {
     const { rendersDir } = this.ensureDirs()

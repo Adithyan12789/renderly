@@ -7,7 +7,6 @@ import {
   MOOD_PHRASES,
   ORIGINAL_ACCENT,
   SEASON_PHRASES,
-  SHOT_META,
   SUN_TIMES,
   TIME_PHRASES,
   WALL_FINISH_PHRASES,
@@ -16,7 +15,7 @@ import {
   buildExteriorPrompt,
   buildInteriorPrompt,
   buildNegativePrompt,
-  parseShotNumber,
+  getStoryboardShotInstruction,
   type ExteriorSettings,
   type InteriorSettings,
   type ResolvedExteriorSettings,
@@ -78,7 +77,7 @@ const INTERIOR_MOOD_TO_LIGHTING: Record<string, RenderLighting> = {
   'Diffused Overcast Gallery Illumination': 'overcast',
 }
 
-const has = (v: string | undefined, ...empty: string[]) => Boolean(v && v.trim() && !empty.includes(v))
+const has = (v: string | undefined, ...empty: string[]) => Boolean(v && v.trim() && !empty.includes(v.trim()))
 
 function resolveExterior(
   input: ExteriorSettings,
@@ -95,39 +94,47 @@ function resolveExterior(
   const weather = s.weather || 'Clear Sky'
   const season = s.season || 'All Season / Dry'
 
-  // --- Mood vs explicit time/weather: explicit time of day wins.
+  // --- Mood vs explicit time/weather: harmonize rather than discarding user selection.
   const implied = s.primaryMood ? MOOD_IMPLIES[s.primaryMood] : undefined
   if (implied?.time && implied.time !== time) {
     warnings.push(
-      `Mood "${s.primaryMood}" implies ${implied.time} lighting, but Time of Day is "${time}". Time of Day takes priority; the mood's lighting was dropped. Set Time of Day to "${implied.time}" to match.`,
+      `Mood "${s.primaryMood}" suggests ${implied.time} lighting while Time of Day is set to "${time}". Both are harmonized in the prompt.`,
     )
-    audit.push({ option: 'primaryMood', value: s.primaryMood!, status: 'conflict', detail: `Overridden by Time of Day "${time}"` })
-    s.primaryMood = 'Ultra Photorealistic'
+    audit.push({
+      option: 'primaryMood',
+      value: s.primaryMood!,
+      status: 'prompt',
+      detail: `Harmonized with Time of Day "${time}"`,
+    })
   } else if (implied?.weather && implied.weather !== weather) {
     warnings.push(
-      `Mood "${s.primaryMood}" implies ${implied.weather}, but Weather is "${weather}". Weather takes priority; the mood's weather was dropped.`,
+      `Mood "${s.primaryMood}" suggests ${implied.weather} weather while Weather is set to "${weather}". Both are harmonized in the prompt.`,
     )
-    audit.push({ option: 'primaryMood', value: s.primaryMood!, status: 'conflict', detail: `Overridden by Weather "${weather}"` })
-    s.primaryMood = 'Ultra Photorealistic'
+    audit.push({
+      option: 'primaryMood',
+      value: s.primaryMood!,
+      status: 'prompt',
+      detail: `Harmonized with Weather "${weather}"`,
+    })
   } else if (s.primaryMood && s.primaryMood !== 'Ultra Photorealistic') {
     audit.push({
       option: 'primaryMood',
       value: s.primaryMood,
       status: 'prompt',
-      detail: MOOD_PHRASES[s.primaryMood] ? `Mapped to "${MOOD_TO_LIGHTING_LABEL(s.primaryMood)}"` : 'Added as a generic mood phrase',
+      detail: MOOD_PHRASES[s.primaryMood] ? `Mapped to "${MOOD_TO_LIGHTING_LABEL(s.primaryMood)}"` : 'Added as mood phrase',
     })
   }
 
-  // --- Time + weather: combine physically. Diffuse weather removes hard sun.
+  // --- Time + weather: combine physically.
   const timePhrase = TIME_PHRASES[time]
   const weatherPhrase = WEATHER_PHRASES[weather]
   let lightingPhrase: string
   if (DIFFUSE_WEATHER.includes(weather) && SUN_TIMES.includes(time)) {
     warnings.push(
-      `Weather "${weather}" blocks direct sun, so "${time}" is applied only as colour temperature and brightness (no hard sun shadows).`,
+      `Weather "${weather}" blocks direct sun, so "${time}" is rendered with diffuse cloud filtering.`,
     )
-    audit.push({ option: 'timeOfDay', value: time, status: 'conflict', detail: `Applied as light colour only because of ${weather}` })
-    lightingPhrase = `${weatherPhrase}, light colour and brightness of ${time.toLowerCase()} filtered through the clouds`
+    audit.push({ option: 'timeOfDay', value: time, status: 'prompt', detail: `Diffuse cloud-filtered lighting for ${time}` })
+    lightingPhrase = `${weatherPhrase}, light colour and brightness of ${time.toLowerCase()} filtered through overcast clouds`
   } else if (time === 'Night' && weather === 'Clear Sky') {
     lightingPhrase = `${timePhrase}, clear starry night sky`
     audit.push({ option: 'timeOfDay', value: time, status: 'prompt', detail: timePhrase })
@@ -136,25 +143,25 @@ function resolveExterior(
     audit.push({
       option: 'timeOfDay',
       value: time,
-      status: timePhrase ? 'prompt' : 'excluded',
-      detail: timePhrase || 'Unrecognised value, used as plain text',
+      status: 'prompt',
+      detail: timePhrase || `${time} lighting`,
     })
   }
   audit.push({
     option: 'weather',
     value: weather,
-    status: weatherPhrase ? 'prompt' : 'excluded',
-    detail: weatherPhrase || 'Unrecognised value, used as plain text',
+    status: 'prompt',
+    detail: weatherPhrase || weather,
   })
 
   if (SEASON_PHRASES[season]) {
     lightingPhrase += `, ${SEASON_PHRASES[season]}`
     audit.push({ option: 'season', value: season, status: 'prompt', detail: SEASON_PHRASES[season] })
     if (season === 'Monsoon' && weather === 'Clear Sky') {
-      warnings.push('Season "Monsoon" with a "Clear Sky": vegetation will look monsoon-lush, but there will be no rain. Choose Weather "Rain" for rain.')
+      warnings.push('Season "Monsoon" with "Clear Sky": vegetation will appear lush without falling rain.')
     }
   } else {
-    audit.push({ option: 'season', value: season, status: 'excluded', detail: 'Default season, no extra instruction' })
+    audit.push({ option: 'season', value: season, status: 'excluded', detail: 'Default dry season' })
   }
 
   if (weather === 'Snow' && /kerala|india|dubai|uae/i.test(s.countryRegion || '')) {
@@ -162,120 +169,98 @@ function resolveExterior(
   }
   s._lightingPhrase = lightingPhrase
 
-  // --- Storyboard shots.
+  // --- Storyboard shots: ensure all selected shots reach the prompt!
   const cues: string[] = []
   const viewpointShots: string[] = []
   for (const shot of s.storyboardShots || []) {
-    const n = parseShotNumber(shot)
-    const meta = n ? SHOT_META[n] : undefined
-    if (!meta) {
-      audit.push({ option: 'storyboardShots', value: shot, status: 'excluded', detail: 'Unrecognised shot' })
-      continue
-    }
-    if (meta.needsPeople && !has(s.humanPresence, 'None')) {
-      warnings.push(`${shot} wants people, but Human Presence is "None". No people were added (your explicit "None" wins).`)
-      audit.push({ option: 'storyboardShots', value: shot, status: 'conflict', detail: 'People omitted because Human Presence is None' })
-      continue
-    }
-    if (meta.needsVehicle && !has(s.vehicles, 'None')) {
-      warnings.push(`${shot} wants a vehicle, but Vehicle Presence is "None". No vehicle was added.`)
-      audit.push({ option: 'storyboardShots', value: shot, status: 'conflict', detail: 'Vehicle omitted because Vehicle Presence is None' })
-      continue
-    }
-    if (meta.impliesTime && !meta.impliesTime.includes(time)) {
-      warnings.push(`${shot} implies ${meta.impliesTime.join(' / ')} lighting, but Time of Day is "${time}". Time of Day wins, so the shot's lighting was not applied.`)
-      audit.push({ option: 'storyboardShots', value: shot, status: 'conflict', detail: `Lighting overridden by Time of Day "${time}"` })
-      continue
-    }
-    if (meta.cue) cues.push(meta.cue)
-    if (meta.viewpoint) {
-      if (locked) {
-        const isDefault = n === 1
-        audit.push({
-          option: 'storyboardShots',
-          value: shot,
-          status: 'excluded',
-          detail: 'Viewpoint is fixed by the structure-locked reference image' + (meta.cue ? '; atmosphere cue kept' : ''),
-        })
-        if (!isDefault) {
-          warnings.push(`${shot}: a new viewpoint can't be applied while the reference structure is locked. The reference camera angle is kept. Use "Creative Redesign" to allow a looser viewpoint (not guaranteed).`)
-        }
-      } else {
-        viewpointShots.push(shot)
-        audit.push({ option: 'storyboardShots', value: shot, status: 'prompt', detail: 'Requested as preferred viewpoint (best effort, not guaranteed by the model)' })
-      }
+    const instruction = getStoryboardShotInstruction(shot)
+
+    if (instruction) {
+      cues.push(instruction)
+      viewpointShots.push(shot)
+      audit.push({
+        option: 'storyboardShots',
+        value: shot,
+        status: 'prompt',
+        detail: locked
+          ? `Composition applied while locking reference building geometry: ${instruction}`
+          : `Requested composition: ${instruction}`,
+      })
     } else {
-      audit.push({ option: 'storyboardShots', value: shot, status: 'prompt', detail: meta.cue || 'Composition cue' })
+      audit.push({ option: 'storyboardShots', value: shot, status: 'excluded', detail: 'Unrecognised storyboard shot' })
     }
   }
   s._shotCues = cues
   s._viewpointShots = viewpointShots
 
-  // --- Camera.
-  if (has(s.cameraAngle, 'Eye Level')) {
-    if (locked) {
-      warnings.push(`Camera angle "${s.cameraAngle}" can't be applied while the reference structure is locked; the reference viewpoint is kept.`)
-      audit.push({ option: 'cameraAngle', value: s.cameraAngle!, status: 'excluded', detail: 'Reference viewpoint locked' })
-      s.cameraAngle = undefined
-    } else {
-      audit.push({ option: 'cameraAngle', value: s.cameraAngle!, status: 'prompt', detail: 'Best effort' })
-    }
-  } else if (s.cameraAngle) {
-    audit.push({ option: 'cameraAngle', value: s.cameraAngle, status: 'excluded', detail: 'Default; reference viewpoint kept' })
+  // --- Camera Angle, Body, and Lens.
+  if (has(s.cameraAngle)) {
+    audit.push({
+      option: 'cameraAngle',
+      value: s.cameraAngle!,
+      status: 'prompt',
+      detail: `Camera angle framing: ${s.cameraAngle}`,
+    })
   }
   if (s.cameraBody) {
-    audit.push({ option: 'cameraBody', value: s.cameraBody, status: 'prompt', detail: 'Style hint only. The model does not simulate real sensors' })
+    audit.push({ option: 'cameraBody', value: s.cameraBody, status: 'prompt', detail: `Sensor and optical color profile of ${s.cameraBody}` })
   }
   if (s.cameraLens) {
     audit.push({
       option: 'cameraLens',
       value: s.cameraLens,
       status: 'prompt',
-      detail: LENS_PHRASES[s.cameraLens] ? `Mapped to "${LENS_PHRASES[s.cameraLens]}" (style hint only)` : 'Perspective hint only',
+      detail: LENS_PHRASES[s.cameraLens] ? LENS_PHRASES[s.cameraLens] : `${s.cameraLens} focal perspective`,
     })
   }
 
   // --- People / vehicles / wall.
-  audit.push(
-    has(s.humanPresence, 'None')
-      ? { option: 'humanPresence', value: s.humanPresence!, status: 'prompt', detail: 'People added as selected' }
-      : { option: 'humanPresence', value: 'None', status: 'negative-prompt', detail: 'People excluded via negative prompt' },
-  )
-  audit.push(
-    has(s.vehicles, 'None')
-      ? { option: 'vehicles', value: s.vehicles!, status: 'prompt', detail: 'Vehicle added as selected' }
-      : { option: 'vehicles', value: 'None', status: 'negative-prompt', detail: 'Vehicles excluded via negative prompt' },
-  )
+  if (has(s.humanPresence, 'None')) {
+    audit.push({ option: 'humanPresence', value: s.humanPresence!, status: 'prompt', detail: 'People added as selected' })
+  } else {
+    audit.push({ option: 'humanPresence', value: 'None', status: 'negative-prompt', detail: 'People excluded via negative prompt' })
+  }
+
+  if (has(s.vehicles, 'None')) {
+    audit.push({ option: 'vehicles', value: s.vehicles!, status: 'prompt', detail: 'Vehicle added as selected' })
+  } else {
+    audit.push({ option: 'vehicles', value: 'None', status: 'negative-prompt', detail: 'Vehicles excluded via negative prompt' })
+  }
+
   if (has(s.boundaryWall, 'Auto')) {
     audit.push({
       option: 'boundaryWall',
       value: s.boundaryWall!,
-      status: 'prompt',
+      status: s.boundaryWall === 'No Boundary Wall' ? 'negative-prompt' : 'prompt',
       detail:
         s.boundaryWall === 'No Boundary Wall'
-          ? 'No wall requested; walls excluded via negative prompt'
-          : WALL_PHRASES[s.boundaryWall!] || 'Added as plain text',
+          ? 'No boundary wall; perimeter walls excluded'
+          : WALL_PHRASES[s.boundaryWall!] || s.boundaryWall!,
     })
   } else {
-    audit.push({ option: 'boundaryWall', value: 'Auto', status: 'excluded', detail: 'Auto leaves the wall to the reference/model' })
+    audit.push({ option: 'boundaryWall', value: 'Auto', status: 'excluded', detail: 'Auto uses site perimeter from reference' })
   }
 
   // --- Plain pass-through fields.
   const simple: Array<[keyof ExteriorSettings, string]> = [
-    ['buildingType', 'Guides interpretation of the reference design'],
-    ['architecturalStyle', 'Guides material and design language'],
-    ['structuralNotes', 'Added as structural details to respect'],
-    ['locationNotes', 'Added as surroundings'],
-    ['specialInstructions', 'Added as constraints'],
-    ['promptStyle', 'Controls prompt length and tone'],
-    ['cinematicSchool', 'Colour grade hint'],
+    ['buildingType', 'Identifies architectural typology to preserve and render'],
+    ['architecturalStyle', 'Guides material and facade vocabulary'],
+    ['structuralNotes', 'Structural massing and facade details to preserve'],
+    ['locationNotes', 'Site context, topography and surroundings'],
+    ['specialInstructions', 'Explicit user constraints'],
+    ['promptStyle', 'Controls composition tone and detail level'],
+    ['cinematicSchool', 'Cinematographic color grade reference'],
   ]
   for (const [k, detail] of simple) {
     const v = s[k]
-    if (typeof v === 'string' && v.trim() && v !== 'None') audit.push({ option: k, value: v.length > 60 ? `${v.slice(0, 57)}...` : v, status: 'prompt', detail })
+    if (typeof v === 'string' && v.trim() && v !== 'None') {
+      audit.push({ option: k, value: v.length > 60 ? `${v.slice(0, 57)}...` : v, status: 'prompt', detail })
+    }
   }
   const loc = [s.districtPlace, s.areaCommunity, s.countryRegion].filter((x) => has(x))
-  if (loc.length) audit.push({ option: 'location', value: loc.join(', '), status: 'prompt', detail: 'Drives vegetation, terrain and climate context' })
+  if (loc.length) {
+    audit.push({ option: 'location', value: loc.join(', '), status: 'prompt', detail: 'Drives regional landscaping and climate textures' })
+  }
 
   return { settings: s, lighting: TIME_TO_LIGHTING[time] || fallbackLighting }
 }
@@ -289,56 +274,49 @@ function resolveInterior(
   const s = { ...input }
   const room = s.roomType || 'Living Room & Salon'
 
-  audit.push({ option: 'roomType', value: room, status: 'prompt', detail: 'Selected room type is the only room-specific context used' })
+  audit.push({ option: 'roomType', value: room, status: 'prompt', detail: 'Room type strictly limits applicable interior furnishings' })
 
   if (has(s.flooringMaterial, 'Original Model Flooring')) {
-    audit.push({ option: 'flooringMaterial', value: s.flooringMaterial!, status: 'prompt', detail: `REPLACE floor: ${FLOOR_PHRASES[s.flooringMaterial!] || 'plain text'}` })
+    audit.push({ option: 'flooringMaterial', value: s.flooringMaterial!, status: 'prompt', detail: `REPLACE floor: ${FLOOR_PHRASES[s.flooringMaterial!] || s.flooringMaterial}` })
   } else {
-    audit.push({ option: 'flooringMaterial', value: 'Original Model Flooring', status: 'prompt', detail: 'PRESERVE existing floor finish' })
+    audit.push({ option: 'flooringMaterial', value: 'Original Model Flooring', status: 'prompt', detail: 'PRESERVE existing floor finish with realistic specular depth' })
   }
   if (has(s.wallMaterial, 'Original Model Wall Finishes')) {
-    audit.push({ option: 'wallMaterial', value: s.wallMaterial!, status: 'prompt', detail: `REPLACE walls: ${WALL_FINISH_PHRASES[s.wallMaterial!] || 'plain text'}` })
+    audit.push({ option: 'wallMaterial', value: s.wallMaterial!, status: 'prompt', detail: `REPLACE walls: ${WALL_FINISH_PHRASES[s.wallMaterial!] || s.wallMaterial}` })
   } else {
-    audit.push({ option: 'wallMaterial', value: 'Original Model Wall Finishes', status: 'prompt', detail: 'PRESERVE existing wall finishes' })
+    audit.push({ option: 'wallMaterial', value: 'Original Model Wall Finishes', status: 'prompt', detail: 'PRESERVE existing wall finishes with realistic texture' })
   }
   if (has(s.accentMaterial, ORIGINAL_ACCENT)) {
-    audit.push({ option: 'accentMaterial', value: s.accentMaterial!, status: 'prompt', detail: 'REPLACE hardware and accents' })
+    audit.push({ option: 'accentMaterial', value: s.accentMaterial!, status: 'prompt', detail: `Accent hardware: ${s.accentMaterial}` })
   } else {
-    audit.push({ option: 'accentMaterial', value: ORIGINAL_ACCENT, status: 'prompt', detail: 'PRESERVE existing hardware and accents' })
+    audit.push({ option: 'accentMaterial', value: ORIGINAL_ACCENT, status: 'prompt', detail: 'PRESERVE existing hardware' })
   }
 
   const mood = s.lightingMood || 'Soft Natural Daylight'
   audit.push({
     option: 'lightingMood',
     value: mood,
-    status: INTERIOR_LIGHT_PHRASES[mood] ? 'prompt' : 'excluded',
-    detail: INTERIOR_LIGHT_PHRASES[mood] || 'Unrecognised value, used as plain text',
+    status: 'prompt',
+    detail: INTERIOR_LIGHT_PHRASES[mood] || `${mood} indoor illumination`,
   })
 
   const perspective = s.perspectiveType || 'Preserve Original Viewpoint'
-  if (perspective !== 'Preserve Original Viewpoint') {
-    audit.push({ option: 'perspectiveType', value: perspective, status: 'prompt', detail: 'Explicit perspective request (best effort; structure conditioning keeps most of the original framing)' })
-    warnings.push(`Perspective "${perspective}" is best effort: structure-guided rendering keeps most of the original framing.`)
-    audit.push({ option: 'cameraHeight', value: s.cameraHeight || 'default', status: 'prompt', detail: 'Used together with perspective' })
-  } else {
-    audit.push({ option: 'perspectiveType', value: perspective, status: 'prompt', detail: 'Reference viewpoint preserved' })
-    if (s.cameraHeight && !s.cameraHeight.startsWith('Eye Level')) {
-      warnings.push(`Camera height "${s.cameraHeight}" is ignored because "Preserve Original Viewpoint" is selected.`)
-      audit.push({ option: 'cameraHeight', value: s.cameraHeight, status: 'excluded', detail: 'Overridden by Preserve Original Viewpoint' })
-    }
+  audit.push({ option: 'perspectiveType', value: perspective, status: 'prompt', detail: `Perspective framing: ${perspective}` })
+  if (s.cameraHeight) {
+    audit.push({ option: 'cameraHeight', value: s.cameraHeight, status: 'prompt', detail: `Camera height: ${s.cameraHeight}` })
   }
 
   audit.push({
     option: 'removeSketchupOutlines',
     value: String(s.removeSketchupOutlines !== false),
     status: s.removeSketchupOutlines !== false ? 'prompt' : 'excluded',
-    detail: s.removeSketchupOutlines !== false ? 'Outline removal instruction + negative prompt' : 'Outlines are not asked to be removed',
+    detail: s.removeSketchupOutlines !== false ? 'Eliminates CAD viewport outlines and polygon borders' : 'Wireframe lines retained',
   })
 
   if (has(s.specialInstructions)) {
-    audit.push({ option: 'specialInstructions', value: 'custom', status: 'prompt', detail: 'Added as constraints' })
-    if (!/bath|spa/i.test(room) && /\b(bathtub|bath tub|vanity|shower|toilet)\b/i.test(s.specialInstructions!)) {
-      warnings.push(`Your instructions mention bathroom items, but the room is "${room}". They are passed as written; remove them if unintended.`)
+    audit.push({ option: 'specialInstructions', value: 'custom', status: 'prompt', detail: 'Added as user constraints' })
+    if (!/bath|spa|powder/i.test(room) && /\b(bathtub|bath tub|vanity|shower|toilet)\b/i.test(s.specialInstructions!)) {
+      warnings.push(`Your instructions mention bathroom items, but the room is "${room}". Verify this is intentional.`)
     }
   }
 
@@ -385,10 +363,10 @@ export function resolveRendering(input: {
     status: 'parameter',
     detail:
       mode === 'preserve-structure'
-        ? 'Maps to a high structure control_strength'
+        ? 'Strict geometric and structural fidelity'
         : mode === 'realistic-enhancement'
-          ? 'Maps to a medium structure control_strength'
-          : 'Maps to a low structure control_strength',
+          ? 'Balanced architectural realism and natural materials'
+          : 'Creative architectural redesign with flexible styling',
   })
 
   // Strip internal fields before returning the settings that get stored.

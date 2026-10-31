@@ -62,6 +62,8 @@ interface RenderingOptionsPanelProps {
   liveWarnings?: string[]
   quality?: 'standard' | 'high' | 'ultra'
   onQualityChange?: (quality: 'standard' | 'high' | 'ultra') => void
+  renderingMode?: 'preserve-structure' | 'realistic-enhancement' | 'creative-redesign'
+  onRenderingModeChange?: (mode: 'preserve-structure' | 'realistic-enhancement' | 'creative-redesign') => void
 }
 
 export function RenderingOptionsPanel({
@@ -80,6 +82,8 @@ export function RenderingOptionsPanel({
   liveWarnings,
   quality = 'high',
   onQualityChange,
+  renderingMode = 'preserve-structure',
+  onRenderingModeChange,
 }: RenderingOptionsPanelProps) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     siteRef: false,
@@ -1403,6 +1407,60 @@ export function RenderingOptionsPanel({
 
         {!collapsedSections.promptPreview && (
           <div className="p-4 flex flex-col gap-3">
+            {/* Structural Fidelity Mode Selector */}
+            {onRenderingModeChange && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-xl bg-surface/80 p-2.5 border border-border/40">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-foreground">Structural Fidelity Mode</span>
+                  <span className="text-[11px] text-muted">
+                    {renderingMode === 'preserve-structure'
+                      ? 'Preserve Structure: 1:1 building envelope, storeys, openings, and roofline locked'
+                      : renderingMode === 'realistic-enhancement'
+                        ? 'Realistic Enhancement: High realism with subtle material and facade enhancements'
+                        : 'Creative Redesign: Architectural styling with viewpoint flexibility'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-background/80 p-0.5 rounded-lg border border-border/60">
+                  <button
+                    type="button"
+                    onClick={() => onRenderingModeChange('preserve-structure')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      renderingMode === 'preserve-structure'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    Preserve Structure
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRenderingModeChange('realistic-enhancement')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      renderingMode === 'realistic-enhancement'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    Realistic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRenderingModeChange('creative-redesign')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs rounded-md transition-all font-medium',
+                      renderingMode === 'creative-redesign'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    Creative
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Quality Tier Selector */}
             {onQualityChange && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-xl bg-surface/80 p-2.5 border border-border/40">

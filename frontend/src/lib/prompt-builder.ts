@@ -37,6 +37,7 @@ export const WEATHER_PHRASES: Record<string, string> = {
   'Partly Cloudy': 'scattered cumulus clouds with patches of direct sun',
 }
 
+/** Weather that removes hard direct sun regardless of the selected time of day. */
 export const DIFFUSE_WEATHER = ['Rain', 'Fog', 'Stormy', 'Snow', 'Overcast']
 export const SUN_TIMES = ['Midday', 'Golden Hour', 'Sunset', 'Dawn']
 
@@ -76,12 +77,23 @@ export const MOOD_PHRASES: Record<string, string> = {
   'Overcast Soft Light': 'soft overcast light',
   'Sunset Drama': 'dramatic sunset sky',
   'Night Luxury': 'luxurious night atmosphere with warm glowing interiors',
+  Joyful: 'warm and uplifting natural ambiance',
+  Serene: 'calm, tranquil, and balanced atmosphere',
+  Romantic: 'atmospheric lighting with gentle contrast',
+  Dramatic: 'bold dramatic light and shadow contrasts',
+  Mysterious: 'deep shadows and evocative atmospheric mood',
+  Melancholic: 'contemplative moody tonal palette',
+  Energetic: 'crisp vibrant lighting with lively presence',
+  Minimal: 'clean restrained simplicity and uncluttered focus',
+  Luxurious: 'sophisticated high-end finish and editorial prestige',
 }
 
 export const LENS_PHRASES: Record<string, string> = {
-  '24mm Tilt-Shift Architectural': 'shift-lens perspective correction with perfectly vertical lines',
-  '16mm Ultra-Wide': 'ultra-wide perspective',
-  '85mm Compressed Perspective': 'compressed telephoto perspective',
+  '24mm Tilt-Shift Architectural': '24mm tilt-shift perspective correction with perfectly vertical lines',
+  '35mm Wide': '35mm wide architectural lens perspective',
+  '50mm Standard Prime': '50mm natural eye-level prime perspective',
+  '16mm Ultra-Wide': '16mm ultra-wide perspective',
+  '85mm Compressed Perspective': '85mm compressed telephoto perspective',
 }
 
 export const FLOOR_PHRASES: Record<string, string> = {
@@ -113,6 +125,25 @@ export const INTERIOR_LIGHT_PHRASES: Record<string, string> = {
 
 export const ORIGINAL_ACCENT = 'Original Model Hardware & Accents'
 
+export const STORYBOARD_SHOT_DESCRIPTIONS: Record<string, string> = {
+  'shot-01': 'monumental hero front elevation capturing complete building facade symmetry, entrance approach, and architectural presence',
+  'shot-02': 'dynamic corner three-quarter view revealing architectural volume, massing, depth, and return facades',
+  'shot-03': 'low road-level perspective looking up from the approach road/driveway, emphasizing architectural scale and height',
+  'shot-04': 'wide neighbourhood establishing shot showcasing complete site boundaries, streetscape, and contextual vegetation',
+  'shot-05': 'dramatic night luxury arrival shot with glowing warm interior lighting through glazing and architectural landscape uplighting',
+  'shot-06': 'cinematic foreground lifestyle framing through lush tropical foliage, garden trees, or reflective courtyard water',
+  'shot-07': 'blue hour twilight street shot with illuminated facade fixtures reflecting off wet driveway pavers under a deep twilight sky',
+  'shot-08': 'rear walking follow perspective along the entrance pathway looking toward the main architectural entrance',
+  'shot-09': 'frontal architectural elevation with natural human figures gracefully positioned to demonstrate true architectural scale',
+  'shot-10': 'architectural facade with subtle motion-blurred passing vehicle streaks along the foreground street',
+  'shot-11': 'pedestrian footpath edge perspective along stone pavers, curb, and site boundary wall',
+  'shot-12': 'authentic local neighbourhood establishing shot with regional flora, native trees, and cultural atmosphere',
+  'shot-13': 'macro architectural detail closeup highlighting tactile materials: concrete joints, timber louvers, and bronze hardware',
+  'shot-14': 'elevated 45-degree oblique drone perspective capturing roof form, building footprint, and surrounding topography',
+  'shot-15': 'welcoming family lifestyle scene near the veranda or entrance showcasing residential warmth and hospitality',
+}
+
+/** Shot number -> behaviour. Used by the resolver and the builder. */
 export interface ShotMeta {
   viewpoint: boolean
   cue?: string
@@ -122,20 +153,20 @@ export interface ShotMeta {
 }
 
 export const SHOT_META: Record<number, ShotMeta> = {
-  1: { viewpoint: true },
-  2: { viewpoint: true },
-  3: { viewpoint: true },
-  4: { viewpoint: true },
-  5: { viewpoint: true, impliesTime: ['Night'] },
+  1: { viewpoint: true, cue: 'monumental hero front elevation' },
+  2: { viewpoint: true, cue: 'dynamic corner three-quarter perspective revealing depth and volume' },
+  3: { viewpoint: true, cue: 'low road-level perspective looking up from foreground driveway' },
+  4: { viewpoint: true, cue: 'wide neighbourhood establishing shot showing streetscape and vegetation' },
+  5: { viewpoint: true, impliesTime: ['Night'], cue: 'dramatic night luxury arrival shot with glowing warm interior light and landscape uplighting' },
   6: { viewpoint: false, cue: 'lush foreground foliage softly framing the view' },
   7: { viewpoint: false, impliesTime: ['Blue Hour', 'Dusk'], cue: 'wet street reflections under the twilight sky' },
   8: { viewpoint: true, needsPeople: true, cue: 'a person walking along the path toward the entrance, seen from behind' },
-  9: { viewpoint: true, needsPeople: true, cue: 'a few natural human figures giving true scale' },
+  9: { viewpoint: true, needsPeople: true, cue: 'a few natural human figures giving true architectural scale' },
   10: { viewpoint: false, needsVehicle: true, cue: 'a subtly motion-blurred passing vehicle in the foreground' },
-  11: { viewpoint: true },
+  11: { viewpoint: true, cue: 'pedestrian footpath perspective along curb and stone pavers' },
   12: { viewpoint: false, cue: 'authentic regional neighbourhood atmosphere and local flora' },
-  13: { viewpoint: true },
-  14: { viewpoint: true },
+  13: { viewpoint: true, cue: 'tactile architectural material macro closeup of joints, louvers, and surfaces' },
+  14: { viewpoint: true, cue: 'elevated 45-degree oblique drone perspective capturing roof planes and topography' },
   15: { viewpoint: false, needsPeople: true, cue: 'a welcoming family scene near the entrance' },
 }
 
@@ -144,39 +175,74 @@ export function parseShotNumber(shot: string): number | null {
   return m ? Number(m[1]) : null
 }
 
-const isSet = (v: string | undefined, ...empty: string[]): v is string =>
-  Boolean(v && v.trim().length > 0 && !empty.includes(v))
+export function getStoryboardShotInstruction(shot: string): string {
+  const num = parseShotNumber(shot)
+  if (num) {
+    const key = `shot-${String(num).padStart(2, '0')}`
+    if (STORYBOARD_SHOT_DESCRIPTIONS[key]) {
+      return STORYBOARD_SHOT_DESCRIPTIONS[key]
+    }
+    if (SHOT_META[num]?.cue) {
+      return SHOT_META[num]!.cue!
+    }
+  }
+  for (const [key, desc] of Object.entries(STORYBOARD_SHOT_DESCRIPTIONS)) {
+    if (shot.toLowerCase().includes(key)) return desc
+  }
+  return shot.replace(/^SHOT\s*\d+\s*[—–-]?\s*/i, '').trim()
+}
 
-/**
- * Exterior prompt. Every section is built only from selected values.
- */
+const isSet = (v: string | undefined, ...empty: string[]): v is string =>
+  Boolean(v && v.trim().length > 0 && !empty.includes(v.trim()))
+
 export function buildExteriorPrompt(
-  rawSettings?: ExteriorRenderingSettings,
+  rawSettings?: ExteriorSettings,
   basePrompt?: string,
 ): string {
   const settings = (rawSettings || {}) as ResolvedExteriorSettings
   const buildingType = settings.buildingType || 'Contemporary House'
   const archStyle = settings.architecturalStyle || 'Tropical Modern'
-  const locked = settings._lockViewpoint !== false
 
-  const subject = `Professional architectural photograph of the exact ${buildingType} shown in the reference image, ${archStyle} design language. Keep the identical massing, floor count, roofline, facade composition, window and door positions, balconies and proportions`
-  const realism =
-    'Convert flat SketchUp surfaces into real physically based materials (natural stone, concrete, timber, plaster, metal, clear glass with real reflections and transparency), realistic contact shadows and ambient occlusion, natural sky, no black outline strokes or viewport lines'
+  // Section 1: Objective & Subject
+  const objective = `Photorealistic architectural visualization and image-edit of the 3D model shown in the reference image: a ${buildingType} executed in ${archStyle} architectural design language.`
 
-  const structure = isSet(settings.structuralNotes) ? `Structural details to respect: ${settings.structuralNotes!.trim()}` : ''
+  // Section 2: Reference Image Interpretation
+  const referenceInterpretation =
+    'Treat the uploaded SketchUp / CAD viewport capture as the primary geometric blueprint. Transform flat, untextured surfaces into authentic real-world architectural construction.'
 
+  // Section 3: Structural Preservation
+  const structureRules = [
+    'Preserve the building silhouette, number of storeys, overall dimensions, proportions, and roof form from the reference image.',
+    'Keep the exact placement and proportions of doors, windows, balconies, stairs, columns, and structural openings.',
+  ]
+  if (isSet(settings.structuralNotes)) {
+    structureRules.push(`Structural details: ${settings.structuralNotes.trim()}.`)
+  }
+  const preservation = structureRules.join(' ')
+
+  // Section 4: Configuration Values (Location, Boundary, Elements)
   const loc = [settings.districtPlace, settings.areaCommunity, settings.countryRegion].filter((v) => isSet(v)).map((v) => v!.trim())
-  const location = loc.length ? `Site context: ${loc.join(', ')}, with regionally appropriate vegetation, terrain and climate` : ''
-  const locationNotes = isSet(settings.locationNotes) ? `Surroundings: ${settings.locationNotes!.trim()}` : ''
+  const locationPhrase = loc.length
+    ? `Site Context: Situated in ${loc.join(', ')}, featuring regionally authentic indigenous vegetation, road textures, and terrain.`
+    : ''
+  const locationNotesPhrase = isSet(settings.locationNotes) ? `Surroundings: ${settings.locationNotes.trim()}.` : ''
 
-  let wall = ''
+  let wallPhrase = ''
   if (isSet(settings.boundaryWall, 'Auto')) {
-    wall =
+    wallPhrase =
       settings.boundaryWall === 'No Boundary Wall'
-        ? 'Open perimeter with no boundary wall'
-        : `Boundary: ${WALL_PHRASES[settings.boundaryWall!] || settings.boundaryWall}`
+        ? 'Perimeter: Open site perimeter with no boundary wall or fence.'
+        : `Perimeter: ${WALL_PHRASES[settings.boundaryWall] || settings.boundaryWall}.`
   }
 
+  const peoplePhrase = isSet(settings.humanPresence, 'None')
+    ? `Human Presence: ${settings.humanPresence} with natural, scale-appropriate attire.`
+    : ''
+  const vehiclesPhrase = isSet(settings.vehicles, 'None')
+    ? `Vehicles: ${settings.vehicles} positioned naturally on the approach or driveway.`
+    : ''
+
+  // Section 5: Material, Lighting, and Realism Instructions
   const time = settings.timeOfDay || 'Golden Hour'
   const weather = settings.weather || 'Clear Sky'
   const lighting =
@@ -187,117 +253,187 @@ export function buildExteriorPrompt(
 
   const moodParts: string[] = []
   if (isSet(settings.primaryMood, 'Ultra Photorealistic')) {
-    moodParts.push(MOOD_PHRASES[settings.primaryMood!] || `${settings.primaryMood} mood`)
+    moodParts.push(MOOD_PHRASES[settings.primaryMood] || `${settings.primaryMood} mood`)
   }
   if (isSet(settings.cinematicSchool, 'None')) {
-    moodParts.push(`colour grade in the style of ${settings.cinematicSchool} cinematography`)
+    moodParts.push(`colour grading inspired by ${settings.cinematicSchool} cinematography`)
   }
-  const mood = moodParts.join(', ')
+  const moodPhrase = moodParts.length ? `Atmosphere & Mood: ${moodParts.join(', ')}.` : ''
 
-  let shots = ''
-  if (settings._shotCues) {
-    const cues = [...settings._shotCues]
-    if (settings._viewpointShots && settings._viewpointShots.length) cues.push(`preferred viewpoint: ${settings._viewpointShots.join('; ')}`)
-    shots = cues.length ? `Composition cues: ${cues.join('; ')}` : ''
-  } else if (settings.storyboardShots && settings.storyboardShots.length) {
-    shots = `Storyboard composition: ${settings.storyboardShots.join('; ')}`
-  }
+  const pbrRealism =
+    'Physically based rendering (PBR): authentic concrete porosity, natural stone grain, warm timber grain, crisp low-iron architectural glazing with real Fresnel reflections and subtle interior transparency, realistic contact shadows, and natural ambient occlusion.'
 
-  const camera = isSet(settings.cameraBody) ? settings.cameraBody : 'medium-format camera'
+  // Section 6: Storyboard Shot & Camera Optics
+  const camera = isSet(settings.cameraBody) ? settings.cameraBody : 'Hasselblad medium-format camera'
   const lens = isSet(settings.cameraLens) ? settings.cameraLens : '35mm Wide'
   const lensLook = LENS_PHRASES[lens] || `${lens} lens perspective`
   const angle = isSet(settings.cameraAngle, 'Eye Level') ? `, ${settings.cameraAngle} camera angle` : ''
-  const optics = locked
-    ? `Photographic look of a ${camera} with ${lensLook}; keep the reference camera viewpoint`
-    : `Photographic look of a ${camera} with ${lensLook}${angle}`
+  const cameraPhrase = `Camera & Optics: Shot on ${camera} with ${lensLook}${angle}.`
 
-  const people = isSet(settings.humanPresence, 'None') ? `People: ${settings.humanPresence}` : ''
-  const vehicles = isSet(settings.vehicles, 'None') ? `Vehicle: ${settings.vehicles}` : ''
+  const shotInstructions: string[] = []
+  if (settings.storyboardShots && settings.storyboardShots.length) {
+    for (const shot of settings.storyboardShots) {
+      const desc = getStoryboardShotInstruction(shot)
+      if (desc) shotInstructions.push(desc)
+    }
+  }
+  const storyboardPhrase = shotInstructions.length
+    ? `Composition & Storyboard: ${shotInstructions.join('; ')}. Retain structural alignment with the reference building while fulfilling this composition.`
+    : 'Composition: Maintain the camera viewpoint, framing, and perspective established in the reference image.'
 
-  const refinement = basePrompt && basePrompt.trim().length > 0 ? basePrompt.trim() : ''
-  const special =
-    settings.specialInstructions?.trim() ||
-    'Keep architecture 100% locked. Do not change geometry, materials, roofline, openings or facade design.'
-  const constraints = `Constraints: ${special}`
+  // Section 7: User Additional Instructions & Refinement
+  const refinement = basePrompt && basePrompt.trim().length > 0 ? `Refinement: ${basePrompt.trim()}` : ''
+  const special = isSet(settings.specialInstructions)
+    ? `User Constraints: ${settings.specialInstructions.trim()}`
+    : 'User Constraints: Keep architecture strictly locked. Do not invent contradictory architectural volumes or shift openings.'
+
+  // Section 8: Negative Constraints
+  const negativeGuidance =
+    'Negative Constraints: Eliminate all SketchUp black outline strokes, CAD wireframes, polygon edges, flat cartoon textures, artificial CGI glows, watermarks, and distorted proportions.'
 
   const style = settings.promptStyle || 'Detailed'
   if (style === 'Concise') {
-    return [subject, lighting, wall, people, vehicles, constraints].filter(Boolean).join('. ')
+    return [
+      objective,
+      preservation,
+      `Lighting: ${lighting}.`,
+      wallPhrase,
+      peoplePhrase,
+      vehiclesPhrase,
+      storyboardPhrase,
+      special,
+      negativeGuidance,
+    ]
+      .filter(Boolean)
+      .join(' ')
   }
 
-  const parts = [subject, realism, structure, location, locationNotes, wall, `Lighting and atmosphere: ${lighting}`, mood, shots, optics, people, vehicles, refinement, constraints]
+  const sections = [
+    objective,
+    referenceInterpretation,
+    preservation,
+    locationPhrase,
+    locationNotesPhrase,
+    wallPhrase,
+    peoplePhrase,
+    vehiclesPhrase,
+    `Lighting & Environment: ${lighting}.`,
+    moodPhrase,
+    pbrRealism,
+    cameraPhrase,
+    storyboardPhrase,
+    refinement,
+    special,
+    negativeGuidance,
+  ]
+
   if (style === 'Cinematic') {
-    parts.push('subtle film grain, natural depth of field, wide dynamic range without HDR look')
+    sections.push('Cinematic Optical Traits: Subtle organic film grain, natural depth of field falloff, wide dynamic range without harsh HDR clipping.')
   } else if (style === 'Conceptual') {
-    parts.push('sculptural volume emphasis, calm negative space, restrained editorial composition')
+    sections.push('Conceptual Artistic Traits: Sculptural geometric volume emphasis, serene negative space, restrained architectural magazine aesthetic.')
   }
-  return parts.filter(Boolean).join('. ')
+
+  return sections.filter(Boolean).join(' ')
 }
 
-/**
- * Interior prompt. Distinguishes preserving an original finish from replacing it.
- */
-export function buildInteriorPrompt(settings?: InteriorRenderingSettings, basePrompt?: string): string {
-  const parts: string[] = []
-  const roomType = settings?.roomType || 'Living Room & Salon'
+export function buildInteriorPrompt(settings?: InteriorSettings, basePrompt?: string): string {
+  const s = settings || {}
+  const roomType = s.roomType || 'Living Room & Salon'
 
-  parts.push(`Professional interior photograph of the exact ${roomType} shown in the reference image`)
+  // Section 1: Objective & Room Type
+  const objective = `Photorealistic architectural interior visualization and image-edit of the exact ${roomType} shown in the reference image.`
 
-  const preservation = isSet(settings?.structuralPreservation)
-    ? settings!.structuralPreservation!.trim()
-    : 'Keep the identical room layout, wall boundaries, ceiling height, windows, doors, fixtures, furniture positions and camera composition'
-  parts.push(preservation)
+  // Section 2: Reference Image Interpretation
+  const referenceInterpretation =
+    'Treat the uploaded SketchUp / CAD room viewport capture as the spatial blueprint. Render flat surfaces and simple models into authentic high-end interior architecture.'
 
-  const floor = settings?.flooringMaterial
-  if (isSet(floor, 'Original Model Flooring')) {
-    parts.push(`Replace only the floor finish with ${FLOOR_PHRASES[floor!] || floor} (keep floor boundaries and perspective)`)
+  // Section 3: Spatial Preservation
+  const preservation = isSet(s.structuralPreservation)
+    ? s.structuralPreservation.trim()
+    : 'Preserve the 1:1 room layout, wall positions, ceiling height, structural columns, doors, window openings, and primary furniture placements from the reference image.'
+
+  // Section 4: Materials (Flooring, Walls, Accents, Ceiling)
+  const floor = s.flooringMaterial
+  const floorPhrase = isSet(floor, 'Original Model Flooring')
+    ? `Floor Finish: Replace only the floor finish with ${FLOOR_PHRASES[floor] || floor}, maintaining floor boundaries and perspective lines.`
+    : 'Floor Finish: Keep the existing floor finish and color from the reference model unchanged, only make it physically realistic with specular reflections and material depth.'
+
+  const wall = s.wallMaterial
+  const wallPhrase = isSet(wall, 'Original Model Wall Finishes')
+    ? `Wall Treatment: Replace only the wall finish with ${WALL_FINISH_PHRASES[wall] || wall}, preserving exact wall geometry.`
+    : 'Wall Treatment: Keep the existing wall finishes and colors from the reference model unchanged, only make them physically realistic with subtle plaster texture.'
+
+  const accent = s.accentMaterial
+  const accentPhrase = isSet(accent, ORIGINAL_ACCENT)
+    ? `Hardware & Accents: Finished in ${accent}.`
+    : ''
+
+  const ceilingPhrase = 'Ceiling: Smooth architectural ceiling with seamless reveals, realistic ambient light bounce, and recessed architectural lighting fixtures.'
+
+  // Section 5: Lighting, Shadows & Room-Appropriate Realism
+  const mood = s.lightingMood || 'Soft Natural Daylight'
+  const lightPhrase = `Lighting: ${INTERIOR_LIGHT_PHRASES[mood] || mood}. Physically accurate global illumination with multi-bounce ambient light, natural soft penumbra shadows under furniture, and no blown-out highlights.`
+
+  let roomDetails = ''
+  if (/bath|spa|powder/i.test(roomType)) {
+    roomDetails = 'Room Elements: Luxury bathroom vanity, high-end sanitaryware, brushed metal tapware, frameless LED backlit mirror, designer basin, and walk-in rain shower with frameless low-iron glass.'
+  } else if (/kitchen/i.test(roomType)) {
+    roomDetails = 'Room Elements: Luxury kitchen cabinetry, premium countertop slabs, undermount sink, designer mixer, integrated architectural appliances, and breakfast counter joinery.'
+  } else if (/bed/i.test(roomType)) {
+    roomDetails = 'Room Elements: Contemporary upholstered bed frame, natural linen bedding, architectural headboard feature, bespoke bedside tables, and integrated wardrobe joinery.'
+  } else if (/office|library/i.test(roomType)) {
+    roomDetails = 'Room Elements: Executive floating desk, ergonomic designer chair, bespoke timber bookshelves with subtle shelf illumination, and curated decor.'
+  } else if (/lounge|bar/i.test(roomType)) {
+    roomDetails = 'Room Elements: Sculptural cocktail lounge seating, bespoke backlit back-bar joinery, smoked glass shelves, and low-profile lounge tables.'
+  } else if (/theater|cinema/i.test(roomType)) {
+    roomDetails = 'Room Elements: Tiered acoustic wall panelling, plush cinema recliners, concealed low-level aisle lighting, and luxury fabric textures.'
   } else {
-    parts.push('Keep the existing floor finish and colour unchanged, only make it physically realistic')
+    roomDetails = 'Room Elements: Contemporary designer sofa seating, sculpted coffee table, textured area rug, low-profile media console, floor-to-ceiling drapery, and curated architectural decor.'
   }
 
-  const wall = settings?.wallMaterial
-  if (isSet(wall, 'Original Model Wall Finishes')) {
-    parts.push(`Replace only the wall finish with ${WALL_FINISH_PHRASES[wall!] || wall} (keep wall geometry unchanged)`)
-  } else {
-    parts.push('Keep the existing wall finishes and colours unchanged, only make them physically realistic')
-  }
+  // Section 6: Camera & Perspective
+  const cameraHeight = s.cameraHeight || 'Eye Level (approx 1.5m / 5ft)'
+  const perspective = s.perspectiveType || 'Preserve Original Viewpoint'
+  const cameraPhrase = perspective === 'Preserve Original Viewpoint'
+    ? 'Camera: Maintain the reference image camera position and framing exactly, with straight vertical architectural lines.'
+    : `Camera: ${cameraHeight}, ${perspective}, with perfectly vertical architectural lines.`
 
-  const accent = settings?.accentMaterial
-  if (isSet(accent, ORIGINAL_ACCENT)) {
-    parts.push(`Hardware, fixtures and accents in ${accent}`)
-  }
+  // Section 7: User Additional Instructions & Refinement
+  const refinement = basePrompt && basePrompt.trim().length > 0 ? `Refinement: ${basePrompt.trim()}` : ''
+  const special = isSet(s.specialInstructions)
+    ? `User Constraints: ${s.specialInstructions.trim()}`
+    : 'User Constraints: Preserve interior spatial layout and walls 100% locked. Do not arbitrarily reconfigure room architecture.'
 
-  const mood = settings?.lightingMood || 'Soft Natural Daylight'
-  parts.push(
-    `Lighting: ${INTERIOR_LIGHT_PHRASES[mood] || mood}, realistic global illumination with soft indirect bounce, natural shadows under furniture, no blown-out highlights`,
-  )
+  // Section 8: Outline Removal & Negative Constraints
+  const outlineRemoval = s.removeSketchupOutlines !== false
+    ? 'Artifact Removal: Eliminate all SketchUp black outline strokes, CAD wireframe lines, and visible polygon mesh edges. Replace them with authentic material seams, tile grout joints, and soft contact shadows.'
+    : ''
+  const negativeGuidance =
+    'Negative Constraints: Do not alter room layout, do not move walls or doors, no warped perspective, no furniture blocking walkways, no cartoon rendering, no clay model appearance, no blurry artifacts.'
 
-  const cameraHeight = settings?.cameraHeight || 'Eye Level (approx 1.5m / 5ft)'
-  const perspective = settings?.perspectiveType || 'Preserve Original Viewpoint'
-  if (perspective === 'Preserve Original Viewpoint') {
-    parts.push('Keep the reference camera position, height and perspective exactly; straight vertical lines')
-  } else {
-    parts.push(`Camera: ${cameraHeight}, ${perspective}, straight vertical lines`)
-  }
-
-  if (settings?.removeSketchupOutlines !== false) {
-    parts.push('Remove SketchUp viewport outlines and polygon edges while keeping real material seams, tile grout lines and architectural reveals')
-  }
-
-  if (basePrompt && basePrompt.trim().length > 0) parts.push(basePrompt.trim())
-  if (settings?.specialInstructions && settings.specialInstructions.trim().length > 0) {
-    parts.push(`Constraints: ${settings.specialInstructions.trim()}`)
-  }
-
-  return parts.join('. ')
+  return [
+    objective,
+    referenceInterpretation,
+    preservation,
+    floorPhrase,
+    wallPhrase,
+    accentPhrase,
+    ceilingPhrase,
+    lightPhrase,
+    roomDetails,
+    cameraPhrase,
+    refinement,
+    special,
+    outlineRemoval,
+    negativeGuidance,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
-/**
- * Builds negative prompt constraints based on category and settings.
- */
-export function buildNegativePrompt(category: 'exterior' | 'interior', settings?: ExteriorRenderingSettings | InteriorRenderingSettings): string {
+export function buildNegativePrompt(category: 'exterior' | 'interior', settings?: ExteriorSettings | InteriorSettings): string {
   if (category === 'exterior') {
-    const ext = settings as ExteriorRenderingSettings | undefined
+    const ext = settings as ExteriorSettings | undefined
     const negs = [
       'altered building geometry',
       'changed window positions',
